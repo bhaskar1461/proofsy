@@ -1,5 +1,9 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+const isProd = process.env.NODE_ENV === 'production';
+const defaultApiUrl = isProd ? "https://proofsy-backend.onrender.com/api" : "http://localhost:5000/api";
+const defaultBackendUrl = isProd ? "https://proofsy-backend.onrender.com" : "http://localhost:5000";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || defaultApiUrl;
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || defaultBackendUrl;
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
