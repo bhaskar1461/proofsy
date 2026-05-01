@@ -8,11 +8,36 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
-const allowedOrigins = [
+function parseOriginList(value) {
+  return (value || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+}
+
+const allowedOrigins = new Set([
   "http://localhost:3000",
-  process.env.FRONTEND_URL,
-].filter(Boolean);
-app.use(cors({ origin: allowedOrigins, credentials: true }));
+  "https://proofsy-omega.vercel.app",
+  ...parseOriginList(process.env.FRONTEND_URL),
+  ...parseOriginList(process.env.FRONTEND_URLS),
+]);
+
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    if (allowedOrigins.has(origin) || /^https:\/\/proofsy(?:-[a-z0-9-]+)?\.vercel\.app$/.test(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`Origin ${origin} is not allowed by CORS`));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

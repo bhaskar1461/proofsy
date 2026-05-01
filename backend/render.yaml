@@ -11,6 +11,10 @@ services:
         sync: false # Set via Render dashboard (MongoDB Atlas string)
       - key: FRONTEND_URL
         sync: false # E.g., https://proofsy.vercel.app
+      - key: FRONTEND_URLS
+        sync: false # Optional comma-separated list for preview/custom frontend domains
+      - key: FRONTEND_BASE_URL
+        sync: false # Public frontend URL used in QR codes and verification links
       - key: BACKEND_URL
         sync: false # E.g., https://proofsy-backend.onrender.com
       - key: SENDGRID_API_KEY
