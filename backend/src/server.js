@@ -24,17 +24,15 @@ const allowedOrigins = new Set([
 
 app.use(cors({
   origin(origin, callback) {
-    if (!origin) {
-      callback(null, true);
-      return;
+    if (!origin) return callback(null, true);
+
+    const cleanOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
+
+    if (allowedOrigins.has(cleanOrigin) || /\.vercel\.app$/.test(cleanOrigin)) {
+      return callback(null, true);
     }
 
-    if (allowedOrigins.has(origin) || /^https:\/\/proofsy(?:-[a-z0-9-]+)?\.vercel\.app$/.test(origin)) {
-      callback(null, true);
-      return;
-    }
-
-    callback(new Error(`Origin ${origin} is not allowed by CORS`));
+    callback(null, false);
   },
   credentials: true,
 }));
