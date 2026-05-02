@@ -1,25 +1,8 @@
-const isProd = process.env.NODE_ENV === "production";
-const defaultApiUrl = isProd ? "https://proofsy-backend.onrender.com/api" : "http://localhost:5000/api";
-const defaultBackendUrl = isProd ? "https://proofsy-backend.onrender.com" : "http://localhost:5000";
-
-function stripTrailingSlash(value: string) {
-  return value.replace(/\/+$/, "");
-}
-
-function toBackendUrl(value: string) {
-  return stripTrailingSlash(value).replace(/\/api$/, "");
-}
-
-function toApiUrl(value: string) {
-  const normalized = stripTrailingSlash(value);
-  return normalized.endsWith("/api") ? normalized : `${normalized}/api`;
-}
-
-const backendEnv = process.env.NEXT_PUBLIC_BACKEND_URL?.trim();
-const apiEnv = process.env.NEXT_PUBLIC_API_URL?.trim();
-
-export const BACKEND_URL = backendEnv ? toBackendUrl(backendEnv) : apiEnv ? toBackendUrl(apiEnv) : defaultBackendUrl;
-const API_BASE = apiEnv ? toApiUrl(apiEnv) : backendEnv ? toApiUrl(backendEnv) : defaultApiUrl;
+// When behind Nginx both frontend & backend share the same origin,
+// so we only need relative paths. For local dev without Nginx,
+// fall back to http://localhost:5000.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 export interface ApiResponse<T = unknown> {
   success: boolean;

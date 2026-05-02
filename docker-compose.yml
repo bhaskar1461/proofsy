@@ -1,0 +1,72 @@
+version: "3.9"
+
+services:
+  # ── Redis (message broker for Bull queue) ──
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ── Backend API ──
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    env_file: ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+    volumes:
+      - pdf_storage:/usr/src/app/storage
+    depends_on:
+      redis:
+        condition: service_healthy
+    expose:
+      - "5000"
+
+  # ── Background Worker (Puppeteer + Bull) ──
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    command: ["node", "src/worker.js"]
+    env_file: ./backend/.env
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=production
+      - FRONTEND_BASE_URL=${FRONTEND_BASE_URL:-http://localhost}
+    volumes:
+      - pdf_storage:/usr/src/app/storage
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ── Frontend (Next.js standalone) ──
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=/api
+    expose:
+      - "3000"
+
+  # ── Nginx Reverse Proxy ──
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  redis_data:
+  pdf_storage:

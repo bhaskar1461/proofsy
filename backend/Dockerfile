@@ -1,8 +1,6 @@
 FROM node:20-slim
 
-# Install latest chrome dev package and fonts to support major charsets (Chinese, Japanese, Arabic, Hebrew, Thai and a few others)
-# Note: this installs the necessary libs to make the bundled version of Chromium that Puppeteer
-# installs, work.
+# Install Chromium dependencies for Puppeteer
 RUN apt-get update \
     && apt-get install -y wget gnupg \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
@@ -12,25 +10,20 @@ RUN apt-get update \
       --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Set up working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and install dependencies
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
 
-# Copy source code
 COPY . .
 
-# Create uploads and storage directories for PDF generation and CSV parsing
-RUN mkdir -p uploads storage/pdfs
-RUN chown -R node:node uploads storage
+# Create directories for uploads and generated PDFs
+RUN mkdir -p uploads storage/pdfs \
+    && chown -R node:node uploads storage
 
-# Run as non-root user
 USER node
 
-# Expose backend port
 EXPOSE 5000
 
-# Start server
-CMD ["npm", "start"]
+# Default: start the API server. Docker Compose overrides this for the worker.
+CMD ["node", "src/server.js"]

@@ -7,33 +7,10 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-function parseOriginList(value) {
-  return (value || "")
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean);
-}
-
-const allowedOrigins = new Set([
-  "http://localhost:3000",
-  "https://proofsy-omega.vercel.app",
-  ...parseOriginList(process.env.FRONTEND_URL),
-  ...parseOriginList(process.env.FRONTEND_URLS),
-]);
-
+// Behind Nginx all traffic is same-origin, so CORS is effectively a no-op.
+// For local dev or direct access we stay permissive.
 app.use(cors({
-  origin(origin, callback) {
-    if (!origin) return callback(null, true);
-
-    const cleanOrigin = origin.endsWith('/') ? origin.slice(0, -1) : origin;
-
-    if (allowedOrigins.has(cleanOrigin) || /\.vercel\.app$/.test(cleanOrigin)) {
-      return callback(null, true);
-    }
-
-    callback(null, false);
-  },
+  origin: true,
   credentials: true,
 }));
 app.use(express.json());
@@ -50,7 +27,7 @@ app.use("/api/verify", require("./routes/verify"));
 
 // Health check
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok", timestamp: new Date().toISOString() });
+  res.json({ success: true, data: { status: "ok", timestamp: new Date().toISOString() } });
 });
 
 // Global error handler

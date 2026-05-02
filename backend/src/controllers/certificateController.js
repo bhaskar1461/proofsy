@@ -85,13 +85,18 @@ exports.generateCertificates = async (req, res) => {
     // Clean up uploaded file
     fs.unlinkSync(file.path);
 
-    // If Bull/Redis is available, queue the PDF generation job
-    // For now, we generate synchronously in a worker-style function
+    // Push certificate generation to the background worker via Bull/Redis
     try {
+      const Queue = require("bull");
+      const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
+      const certQueue = new Queue("certificate-generation", REDIS_URL);
+      await certQueue.add({ eventId: event._id.toString() });
+      console.log(`[API] Queued certificate generation for event ${event._id}`);
+    } catch (e) {
+      // Redis unavailable — fall back to synchronous generation
+      console.warn("[API] Redis queue unavailable, generating synchronously:", e.message);
       const { queueCertificateGeneration } = require("../workers/certificateWorker");
       queueCertificateGeneration(event._id.toString());
-    } catch (e) {
-      console.warn("Queue not available, PDFs will be generated on next trigger:", e.message);
     }
 
     return res.status(202).json({

@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node src/server.js",
     "start": "node src/server.js",
+    "worker": "node src/worker.js",
     "test": "jest --runInBand --detectOpenHandles --forceExit"
   },
   "jest": {
