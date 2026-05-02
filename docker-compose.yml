@@ -17,6 +17,8 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
+    deploy:
+      replicas: 3
     env_file: ./backend/.env
     environment:
       - REDIS_URL=redis://redis:6379
@@ -33,6 +35,8 @@ services:
   worker:
     build: ./backend
     restart: unless-stopped
+    deploy:
+      replicas: 2
     command: ["node", "src/worker.js"]
     env_file: ./backend/.env
     environment:
@@ -49,6 +53,8 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
+    deploy:
+      replicas: 2
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=/api
