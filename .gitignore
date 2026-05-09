@@ -29,3 +29,16 @@ backend/storage/
 backend/uploads/
 backend/tests/valid.csv
 backend/tests/empty.csv
+backend/logs/
+
+# Non-project files
+*.jpeg
+*.docx
+design-skills/
+design-system/
+ui-ux-skills/
+impeccable-src/
+.impeccable/
+run-logs/
+nginx/
+.codex
