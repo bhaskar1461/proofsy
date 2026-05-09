@@ -111,7 +111,7 @@ export default function CreateEventPage({ initialTemplate }: { initialTemplate?:
       <Sidebar />
       <main className="flex-1 overflow-auto">
         {/* Header */}
-        <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5">
+        <header className="sticky top-0 z-10 bg-[var(--color-surface)]/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5">
           <h2 className="text-xl font-bold text-[var(--color-foreground)]">Create New Event</h2>
           <p className="text-sm text-[var(--color-muted)] mt-0.5">Set up an event, choose a template, and add recipients.</p>
         </header>
@@ -225,16 +225,16 @@ export default function CreateEventPage({ initialTemplate }: { initialTemplate?:
 
               {/* Tab switcher */}
               <div className="flex gap-1 bg-[var(--color-surface-alt)] p-1 rounded-xl w-fit">
-                <button onClick={() => setTab("manual")} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "manual" ? "bg-white shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
+                <button onClick={() => setTab("manual")} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "manual" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
                   Add Manually
                 </button>
-                <button onClick={() => setTab("csv")} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "csv" ? "bg-white shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
+                <button onClick={() => setTab("csv")} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "csv" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
                   Upload CSV
                 </button>
               </div>
 
               {tab === "manual" && (
-                <div className="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-5">
+                <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 space-y-5">
                   {/* Add form */}
                   <div className="flex gap-3">
                     <input value={newName} onChange={(e) => setNewName(e.target.value)} type="text" placeholder="Full Name" className="flex-1 border border-[var(--color-border)] rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/10 placeholder:text-[var(--color-muted)]/50" />
@@ -282,7 +282,7 @@ export default function CreateEventPage({ initialTemplate }: { initialTemplate?:
               )}
 
               {tab === "csv" && (
-                <div className="bg-white rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+                <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
                   <div
                     className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer
                       ${isDragging ? "border-[var(--color-primary)] bg-[var(--color-primary-faint)]" : file ? "border-[var(--color-success)] bg-[var(--color-success-bg)]" : "border-[var(--color-border)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-alt)]"}`}
@@ -330,7 +330,7 @@ export default function CreateEventPage({ initialTemplate }: { initialTemplate?:
                 </div>
               )}
 
-              <div className="bg-white rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
+              <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] divide-y divide-[var(--color-border)]">
                 <div className="px-6 py-4 flex items-center justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)]">Template</p>

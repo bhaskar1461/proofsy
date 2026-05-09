@@ -21,11 +21,11 @@ export const TEMPLATE_DEFINITIONS: TemplateDefinition[] = [
   {
     id: "modern",
     name: "Modern",
-    desc: "Clean minimalist design with crisp lines and contemporary sans-serif fonts. Great for tech events.",
-    color: "from-slate-100 to-white",
-    accent: "border-slate-400",
-    border: "border-slate-200",
-    tags: ["Minimal", "Tech"],
+    desc: "Institution-style participation certificate with club logos, blue academic hierarchy, signature row, and magenta angular accents.",
+    color: "from-fuchsia-50 to-white",
+    accent: "border-fuchsia-700",
+    border: "border-fuchsia-200",
+    tags: ["Academic", "Workshop"],
   },
   {
     id: "elegant",

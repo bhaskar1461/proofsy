@@ -12,6 +12,7 @@ const FRONTEND_BASE_URL = process.env.FRONTEND_BASE_URL || "http://localhost:300
 
 // Valid template IDs
 const VALID_TEMPLATES = ["classic", "modern", "elegant", "corporate", "academic", "creative"];
+const TEMPLATE_ASSETS_DIR = path.join(TEMPLATES_DIR, "assets");
 
 if (!fs.existsSync(PDF_DIR)) {
   fs.mkdirSync(PDF_DIR, { recursive: true });
@@ -50,6 +51,12 @@ async function buildHTML(templateId, data) {
     },
   });
 
+  const assetDataUrl = (fileName, mimeType) => {
+    const assetPath = path.join(TEMPLATE_ASSETS_DIR, fileName);
+    if (!fs.existsSync(assetPath)) return "";
+    return `data:${mimeType};base64,${fs.readFileSync(assetPath).toString("base64")}`;
+  };
+
   return html
     .replace(/\{\{name\}\}/g, data.name)
     .replace(/\{\{event\}\}/g, data.eventName)
@@ -58,13 +65,15 @@ async function buildHTML(templateId, data) {
     .replace(/\{\{verificationCode\}\}/g, data.verificationCode)
     .replace(/\{\{duration\}\}/g, durationStr)
     .replace(/\{\{verificationUrl\}\}/g, verificationUrl)
-    .replace(/\{\{qrCodeDataUrl\}\}/g, qrCodeDataUrl);
+    .replace(/\{\{qrCodeDataUrl\}\}/g, qrCodeDataUrl)
+    .replace(/\{\{snistLogoDataUrl\}\}/g, assetDataUrl("snist-logo.jpg", "image/jpeg"))
+    .replace(/\{\{snistLogoStripDataUrl\}\}/g, assetDataUrl("snist-logo-strip.jpg", "image/jpeg"));
 }
 
 /**
- * Renders a single certificate to PDF using Puppeteer.
+ * Renders a single certificate to PDF using a reused Puppeteer page.
  */
-async function renderCertificatePDF(certificate, user, event) {
+async function renderCertificatePDF(page, certificate, user, event) {
   const html = await buildHTML(event.templateId || "modern", {
     name: user.name,
     eventName: event.name,
@@ -74,32 +83,21 @@ async function renderCertificatePDF(certificate, user, event) {
     duration: event.duration,
   });
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  await page.setContent(html, { waitUntil: "domcontentloaded" });
+  await page.evaluateHandle('document.fonts.ready');
+  
+  const pdfFileName = `${certificate.verificationCode}.pdf`;
+  const pdfPath = path.join(PDF_DIR, pdfFileName);
+
+  await page.pdf({
+    path: pdfPath,
+    width: "1056px",
+    height: "746px",
+    printBackground: true,
+    margin: { top: 0, right: 0, bottom: 0, left: 0 },
   });
 
-  try {
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: "networkidle0" });
-    await page.waitForFunction(() => document.fonts.ready);
-    await new Promise((r) => setTimeout(r, 500));
-
-    const pdfFileName = `${certificate.verificationCode}.pdf`;
-    const pdfPath = path.join(PDF_DIR, pdfFileName);
-
-    await page.pdf({
-      path: pdfPath,
-      width: "1056px",
-      height: "746px",
-      printBackground: true,
-      margin: { top: 0, right: 0, bottom: 0, left: 0 },
-    });
-
-    return `/storage/pdfs/${pdfFileName}`;
-  } finally {
-    await browser.close();
-  }
+  return `/storage/pdfs/${pdfFileName}`;
 }
 
 /**
@@ -108,37 +106,77 @@ async function renderCertificatePDF(certificate, user, event) {
 async function queueCertificateGeneration(eventId) {
   console.log(`[Worker] Starting certificate generation for event: ${eventId}`);
 
-  const pendingCerts = await Certificate.find({ eventId, status: "pending" });
+  const event = await Event.findById(eventId);
+  if (!event) {
+    console.error(`[Worker] Event ${eventId} not found.`);
+    return { success: 0, failed: 0 };
+  }
+
+  const pendingCerts = await Certificate.find({ eventId, status: "pending" }).populate("userId");
   console.log(`[Worker] Found ${pendingCerts.length} pending certificates`);
 
+  if (pendingCerts.length === 0) return { success: 0, failed: 0 };
+
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || puppeteer.executablePath(),
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  });
+  
   let success = 0;
   let failed = 0;
+  
+  try {
+    const page = await browser.newPage();
+    
+    // We update statuses in batches to avoid locking the DB
+    let bulkUpdates = [];
+    
+    for (const cert of pendingCerts) {
+      try {
+        const user = cert.userId;
+        if (!user) {
+          throw new Error("User missing");
+        }
 
-  for (const cert of pendingCerts) {
-    try {
-      const user = await User.findById(cert.userId);
-      const event = await Event.findById(cert.eventId);
+        const pdfUrl = await renderCertificatePDF(page, cert, user, event);
+        
+        bulkUpdates.push({
+          updateOne: {
+            filter: { _id: cert._id },
+            update: { $set: { pdfUrl, status: "generated" } }
+          }
+        });
 
-      if (!user || !event) {
-        cert.status = "failed";
-        await cert.save();
+        success++;
+        if (success % 100 === 0) {
+          console.log(`[Worker] Generated ${success} certificates...`);
+        }
+      } catch (err) {
+        console.error(`[Worker] Failed: ${cert.verificationCode}`, err.message);
+        bulkUpdates.push({
+          updateOne: {
+            filter: { _id: cert._id },
+            update: { $set: { status: "failed" } }
+          }
+        });
         failed++;
-        continue;
       }
 
-      const pdfUrl = await renderCertificatePDF(cert, user, event);
-      cert.pdfUrl = pdfUrl;
-      cert.status = "generated";
-      await cert.save();
-
-      success++;
-      console.log(`[Worker] Generated: ${cert.verificationCode} (template: ${event.templateId || "modern"})`);
-    } catch (err) {
-      console.error(`[Worker] Failed: ${cert.verificationCode}`, err.message);
-      cert.status = "failed";
-      await cert.save();
-      failed++;
+      // Execute bulk updates every 500 records
+      if (bulkUpdates.length >= 500) {
+        await Certificate.bulkWrite(bulkUpdates);
+        bulkUpdates = [];
+      }
     }
+    
+    // Final flush
+    if (bulkUpdates.length > 0) {
+      await Certificate.bulkWrite(bulkUpdates);
+    }
+    
+  } finally {
+    await browser.close();
   }
 
   console.log(`[Worker] Done. Success: ${success}, Failed: ${failed}`);

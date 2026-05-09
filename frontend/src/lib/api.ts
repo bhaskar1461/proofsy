@@ -2,7 +2,6 @@
 // so we only need relative paths. For local dev without Nginx,
 // fall back to http://localhost:5000.
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
@@ -11,18 +10,47 @@ export interface ApiResponse<T = unknown> {
   message?: string;
 }
 
+// Timeout wrapper for fetch
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 10000): Promise<Response> {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeout);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (error) {
+    clearTimeout(id);
+    throw error;
+  }
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<ApiResponse<T>> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...options?.headers },
+    const isFormData = options?.body instanceof FormData;
+    const headers: HeadersInit = { ...options?.headers };
+    
+    // Only set application/json if it's NOT FormData
+    if (!isFormData && !headers["Content-Type"]) {
+      headers["Content-Type"] = "application/json";
+    }
+
+    const res = await fetchWithTimeout(`${API_BASE}${path}`, {
       ...options,
+      headers,
     });
+    
     const json = await res.json();
     if (!res.ok) {
       return { success: false, error: json.error || `HTTP ${res.status}` };
     }
     return json;
   } catch (err) {
+    if ((err as Error).name === 'AbortError') {
+      return { success: false, error: "Request timed out" };
+    }
     return { success: false, error: err instanceof Error ? err.message : "Network error" };
   }
 }
@@ -136,16 +164,14 @@ export const api = {
     }),
 
   // Certificates
-  generateCertificates: async (eventId: string, file: File) => {
+  generateCertificates: (eventId: string, file: File) => {
     const formData = new FormData();
     formData.append("eventId", eventId);
     formData.append("file", file);
-    try {
-      const res = await fetch(`${API_BASE}/certificates/generate`, { method: "POST", body: formData });
-      return await res.json();
-    } catch (err) {
-      return { success: false, error: err instanceof Error ? err.message : "Network error" };
-    }
+    return request<{ success: boolean; message?: string }>("/certificates/generate", { 
+      method: "POST", 
+      body: formData 
+    });
   },
 
   listCertificates: () =>

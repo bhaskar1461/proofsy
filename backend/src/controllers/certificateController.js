@@ -52,34 +52,72 @@ exports.generateCertificates = async (req, res) => {
       });
     }
 
-    // Process rows: upsert users, create certificates
-    const jobId = uuidv4();
-    let created = 0;
-
+    // Deduplicate rows by email in-memory
+    const uniqueRowsMap = new Map();
     for (const row of rows) {
-      // Upsert user
-      let user = await User.findOne({ email: row.email });
-      if (!user) {
-        user = await User.create({ name: row.name, email: row.email });
+      if (!uniqueRowsMap.has(row.email)) {
+        uniqueRowsMap.set(row.email, row.name);
       }
+    }
 
-      // Skip if certificate already exists for this user+event
-      const existing = await Certificate.findOne({
-        userId: user._id,
-        eventId: event._id,
-      });
-      if (existing) continue;
+    const uniqueEmails = Array.from(uniqueRowsMap.keys());
 
-      const verificationCode = `CERT-${uuidv4().slice(0, 8).toUpperCase()}`;
+    // 1. Bulk find existing users
+    const existingUsers = await User.find({ email: { $in: uniqueEmails } }).lean();
+    const existingUserMap = new Map();
+    for (const user of existingUsers) {
+      existingUserMap.set(user.email, user._id);
+    }
 
-      await Certificate.create({
-        userId: user._id,
-        eventId: event._id,
-        verificationCode,
-        status: "pending",
-      });
+    // 2. Identify missing users and perform a single bulk insert
+    const missingUsers = [];
+    for (const email of uniqueEmails) {
+      if (!existingUserMap.has(email)) {
+        missingUsers.push({ email, name: uniqueRowsMap.get(email) });
+      }
+    }
 
-      created++;
+    if (missingUsers.length > 0) {
+      const insertedUsers = await User.insertMany(missingUsers, { ordered: false });
+      for (const user of insertedUsers) {
+        existingUserMap.set(user.email, user._id);
+      }
+    }
+
+    // 3. Collect all user IDs associated with the event
+    const allUserIds = Array.from(existingUserMap.values());
+
+    // 4. Bulk find existing certificates for these users & event
+    const existingCerts = await Certificate.find({
+      userId: { $in: allUserIds },
+      eventId: event._id
+    }).lean();
+
+    const existingCertSet = new Set();
+    for (const cert of existingCerts) {
+      existingCertSet.add(cert.userId.toString());
+    }
+
+    // 5. Prepare and execute single bulk insert for remaining certificates
+    const newCertificates = [];
+    for (const userId of allUserIds) {
+      if (!existingCertSet.has(userId.toString())) {
+        newCertificates.push({
+          userId: userId,
+          eventId: event._id,
+          verificationCode: `CERT-${uuidv4().slice(0, 8).toUpperCase()}`,
+          status: "pending"
+        });
+      }
+    }
+
+    let created = 0;
+    const jobId = uuidv4();
+
+    if (newCertificates.length > 0) {
+      // Chunk bulk inserts if extremely large (e.g., > 100k), but insertMany handles 10k perfectly fine
+      const insertedCerts = await Certificate.insertMany(newCertificates, { ordered: false });
+      created = insertedCerts.length;
     }
 
     // Clean up uploaded file
@@ -217,24 +255,38 @@ exports.sendEmails = async (req, res) => {
 // GET /api/certificates/stats
 exports.getStats = async (req, res) => {
   try {
-    const totalCertificates = await Certificate.countDocuments();
-    const generated = await Certificate.countDocuments({ status: "generated" });
-    const pending = await Certificate.countDocuments({ status: "pending" });
-    const failed = await Certificate.countDocuments({ status: "failed" });
-    const totalEvents = await Event.countDocuments();
-    const totalUsers = await User.countDocuments();
+    // Run all aggregate counts in parallel
+    const [
+      totalCertificates,
+      generated,
+      pending,
+      failed,
+      totalEvents,
+      totalUsers,
+      recentEvents
+    ] = await Promise.all([
+      Certificate.countDocuments(),
+      Certificate.countDocuments({ status: "generated" }),
+      Certificate.countDocuments({ status: "pending" }),
+      Certificate.countDocuments({ status: "failed" }),
+      Event.countDocuments(),
+      User.countDocuments(),
+      Event.find().sort({ createdAt: -1 }).limit(5).lean()
+    ]);
 
     // Verification rate = generated / total
     const verificationRate = totalCertificates > 0
       ? Math.round((generated / totalCertificates) * 100)
       : 0;
 
-    // Recent events with certificate counts
-    const recentEvents = await Event.find().sort({ createdAt: -1 }).limit(5);
+    // Fetch cert counts for recent events in parallel
     const recentWithCounts = await Promise.all(
       recentEvents.map(async (event) => {
-        const certCount = await Certificate.countDocuments({ eventId: event._id });
-        const genCount = await Certificate.countDocuments({ eventId: event._id, status: "generated" });
+        const [certCount, genCount] = await Promise.all([
+          Certificate.countDocuments({ eventId: event._id }),
+          Certificate.countDocuments({ eventId: event._id, status: "generated" })
+        ]);
+        
         return {
           id: event._id,
           name: event.name,

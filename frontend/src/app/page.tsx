@@ -50,10 +50,10 @@ export default function AdminDashboard() {
   }, []);
 
   const metrics = [
-    { label: "Total Events", value: stats?.totalEvents || 0, icon: "calendar", color: "bg-blue-50 text-blue-600" },
-    { label: "Certificates Issued", value: stats?.totalCertificates || 0, icon: "doc", color: "bg-emerald-50 text-emerald-600" },
-    { label: "Recipients", value: stats?.totalUsers || 0, icon: "users", color: "bg-purple-50 text-purple-600" },
-    { label: "Ready To Verify", value: stats?.verificationRate || 0, suffix: "%", icon: "shield", color: "bg-amber-50 text-amber-600" },
+    { label: "Total Events", value: stats?.totalEvents || 0, icon: "calendar", color: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400" },
+    { label: "Certificates Issued", value: stats?.totalCertificates || 0, icon: "doc", color: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400" },
+    { label: "Recipients", value: stats?.totalUsers || 0, icon: "users", color: "bg-purple-50 text-purple-600 dark:bg-purple-500/10 dark:text-purple-400" },
+    { label: "Ready To Verify", value: stats?.verificationRate || 0, suffix: "%", icon: "shield", color: "bg-amber-50 text-amber-600 dark:bg-amber-500/10 dark:text-amber-400" },
   ];
 
   const iconMap: Record<string, React.ReactNode> = {
@@ -92,16 +92,16 @@ export default function AdminDashboard() {
       <Sidebar />
       <main className="flex-1 overflow-auto relative">
         {/* Decorative background orbs */}
-        <motion.div variants={pulseGlow} animate="animate" className="absolute top-20 right-20 w-72 h-72 bg-blue-200/20 rounded-full blur-3xl pointer-events-none" />
-        <motion.div variants={pulseGlow} animate="animate" style={{ animationDelay: '1s' }} className="absolute top-60 left-10 w-56 h-56 bg-purple-200/15 rounded-full blur-3xl pointer-events-none" />
-        <motion.div variants={float} animate="animate" className="absolute bottom-20 right-40 w-40 h-40 bg-emerald-200/10 rounded-full blur-2xl pointer-events-none" />
+        <motion.div variants={pulseGlow} animate="animate" className="absolute top-20 right-20 w-72 h-72 bg-blue-200/20 dark:bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
+        <motion.div variants={pulseGlow} animate="animate" style={{ animationDelay: '1s' }} className="absolute top-60 left-10 w-56 h-56 bg-purple-200/15 dark:bg-purple-600/10 rounded-full blur-3xl pointer-events-none" />
+        <motion.div variants={float} animate="animate" className="absolute bottom-20 right-40 w-40 h-40 bg-emerald-200/10 dark:bg-emerald-600/10 rounded-full blur-2xl pointer-events-none" />
 
         {/* Header */}
         <motion.header
           variants={headerSlide}
           initial="hidden"
           animate="visible"
-          className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5 flex items-center justify-between"
+          className="sticky top-0 z-10 bg-white/80 dark:bg-[#1E293B]/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5 flex items-center justify-between"
         >
           <div>
             <h2 className="text-xl font-bold text-[var(--color-foreground)]">Dashboard</h2>
@@ -127,9 +127,9 @@ export default function AdminDashboard() {
         <motion.div variants={pageVariants} initial="hidden" animate="visible" className="px-8 py-8 space-y-8 relative z-[1]">
           {/* Backend status banner */}
           {!backendOnline && !loading && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-3 flex items-center gap-3">
+            <div className="bg-[var(--color-warning-bg)] border border-amber-200 dark:border-amber-900/50 rounded-xl px-5 py-3 flex items-center gap-3">
               <svg className="w-5 h-5 text-amber-500 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
-              <p className="text-sm text-amber-800">Backend not available. Showing empty data. Start the backend with <code className="bg-amber-100 px-1.5 py-0.5 rounded text-xs font-mono">npm run dev</code> in the <code className="bg-amber-100 px-1.5 py-0.5 rounded text-xs font-mono">backend/</code> folder.</p>
+              <p className="text-sm text-amber-800 dark:text-amber-500">Backend not available. Showing empty data. Start the backend with <code className="bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded text-xs font-mono">npm run dev</code> in the <code className="bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded text-xs font-mono">backend/</code> folder.</p>
             </div>
           )}
 
@@ -150,7 +150,7 @@ export default function AdminDashboard() {
           </motion.section>
 
           {/* Events Table */}
-          <motion.section variants={fadeUp} className="bg-white rounded-2xl border border-[var(--color-border)] overflow-hidden">
+          <motion.section variants={fadeUp} className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] overflow-hidden">
             <div className="px-6 py-5 flex items-center justify-between border-b border-[var(--color-border)]">
               <div>
                 <h3 className="text-base font-bold text-[var(--color-foreground)]">Recent Events</h3>

@@ -1,0 +1,8 @@
+{"level":"info","message":"✓ All required environment variables are set","service":"proofsy-backend","timestamp":"2026-05-06 20:45:17"}
+{"level":"info","message":"✓ Connected to MongoDB: mongodb://127.0.0.1:27017/proofsy","service":"proofsy-backend","timestamp":"2026-05-06 20:45:18"}
+{"level":"info","message":"✓ Proofsy backend running on http://localhost:5000","service":"proofsy-backend","timestamp":"2026-05-06 20:45:18"}
+{"level":"info","message":"Environment: development","service":"proofsy-backend","timestamp":"2026-05-06 20:45:18"}
+{"level":"info","message":"GET /api/health 200 4ms","service":"proofsy-backend","timestamp":"2026-05-06 20:45:42"}
+{"level":"info","message":"GET /api/health 200 0ms","service":"proofsy-backend","timestamp":"2026-05-06 20:46:36"}
+{"level":"info","message":"GET /favicon.ico 404 1ms","service":"proofsy-backend","timestamp":"2026-05-06 20:46:36"}
+{"level":"info","message":"GET /api/health 200 1ms","service":"proofsy-backend","timestamp":"2026-05-06 20:46:39"}

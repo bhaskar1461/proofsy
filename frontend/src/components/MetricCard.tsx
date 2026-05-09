@@ -47,7 +47,7 @@ export default function MetricCard({
   const animatedValue = useCountUp(value);
 
   return (
-    <div className="bg-white rounded-2xl border border-[var(--color-border)] p-6 hover:shadow-md hover:border-[var(--color-border-strong)] cursor-default group">
+    <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 hover:shadow-md hover:border-[var(--color-border-strong)] transition-all cursor-default group">
       <div className="flex items-start justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-2">
