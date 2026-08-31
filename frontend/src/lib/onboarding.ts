@@ -17,8 +17,8 @@ export const onboardingSteps: Array<{
   href: string;
 }> = [
   { id: "createdEvent", label: "Create event", href: "/events/new" },
-  { id: "addedRecipients", label: "Add recipients", href: "/events" },
-  { id: "issuedCredentials", label: "Generate certificates", href: "/events" },
+  { id: "addedRecipients", label: "Add recipients", href: "/" },
+  { id: "issuedCredentials", label: "Generate certificates", href: "/" },
   { id: "verifiedCertificate", label: "Verify certificate", href: "/verify" },
 ];
 

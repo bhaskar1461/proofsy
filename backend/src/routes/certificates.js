@@ -8,8 +8,6 @@ const { protect } = require("../middleware/auth");
 const { tenantProtect } = require("../middleware/tenantProtect");
 
 // Configure multer for CSV uploads.
-// We require BOTH a CSV extension and an acceptable CSV-ish MIME type to reduce
-// the risk of disguised uploads being processed.
 const CSV_MIME_TYPES = new Set([
   "text/csv",
   "application/csv",
@@ -31,8 +29,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
-// All certificate routes require authentication and are organization-scoped.
+// All certificate routes require authentication and are workspace-scoped.
 router.post("/generate", protect, tenantProtect, upload.single("file"), certificateController.generateCertificates);
+router.get("/batch/:batchId", protect, tenantProtect, certificateController.getBatchStatus);
 router.post("/send-emails", protect, tenantProtect, certificateController.sendEmails);
 router.get("/stats", protect, tenantProtect, certificateController.getStats);
 router.get("/verification-analytics", protect, tenantProtect, certificateController.getVerificationAnalytics);

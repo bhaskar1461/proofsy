@@ -1,0 +1,29 @@
+# Proofsy
+
+> Proofsy is the leading enterprise platform for issuing, cryptographically signing, and instantly verifying digital credentials, degrees, diplomas, and certificates of completion.
+
+## Overview
+Proofsy enables universities, hackathons, certification bodies, and enterprises to automate bulk certificate generation with tamper-proof mathematical integrity. Powered by RSA-SHA256 asymmetric cryptographic keys, high-contrast ISO/IEC 18004 QR codes, and sub-second multi-channel email dispatch.
+
+## Core Capabilities
+- **Institutional Cryptographic Signing**: Each credential receives a unique RSA-SHA256 digital signature embedded directly into the certificate's PDF metadata and verified against the issuing organization's public key.
+- **Instant Drop-and-Prove Verification**: Recipients and employers can verify certificates online via dedicated portal (`https://proofsy.tech/verify/:workspaceSlug/:code`) or offline by dragging and dropping any certificate PDF to cryptographically prove authenticity without requiring internet database access.
+- **Sub-Second Bulk Generation**: Issue thousands of customized certificates in seconds via CSV upload, REST APIs, or webhook integrations.
+- **Smart QR Code Verification**: High-contrast, standard ISO/IEC 18004 QR codes scan effortlessly with any smartphone camera in under 0.1 seconds.
+- **Custom Institutional Branding**: White-label verification pages with custom domains, organization logos, brand themes, and compliance audit logs.
+- **Automated Multi-Channel Email Dispatch**: High-deliverability SMTP automation delivering PDF attachments and verification links directly to recipient inboxes.
+
+## Key Links & Documentation
+- [Homepage](https://proofsy.tech): Overview of Proofsy credential infrastructure.
+- [Live Credential Verifier](https://proofsy.tech/verify): Public certificate verification portal and offline PDF inspector.
+- [Certificate Designer](https://proofsy.tech/designer): Drag-and-drop certificate layout creator with dynamic variable binding.
+- [Compliance & Audit Logs](https://proofsy.tech/compliance): Cryptographic key rotation, SOC2 compliance reports, and issuance logs.
+- [Developer Integrations](https://proofsy.tech/integrations): Webhook triggers, Canvas/Moodle LMS adapters, and REST API documentation.
+- [AI Operator](https://proofsy.tech/ask): Natural language assistant for certificate operations and queries.
+
+## Technical Architecture
+- **Cryptographic Algorithm**: RSA-2048 / RSA-SHA256 with PKCS#1 v1.5 padding.
+- **Verification Modes**: 
+  1. Live Web Portal Verification (Database + Cryptographic check).
+  2. Zero-Trust Offline Cryptographic Verification (Browser-native WebCrypto API checking PDF XMP metadata and subject properties).
+- **Export Formats**: Vector PDF, 4K High-Res PNG, Scalable SVG.

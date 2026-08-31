@@ -6,10 +6,13 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import MetricCard from "@/components/MetricCard";
+import PublicLandingPage from "@/components/PublicLandingPage";
+import { useAuth } from "@/contexts/AuthContext";
 import { api, CertificateData, EventData, StatsData } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, float, pulseGlow, cardHover, cardTap } from "@/lib/animations";
 
-export default function AdminDashboard() {
+export default function HomePage() {
+  const { member, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [events, setEvents] = useState<EventData[]>([]);
   const [certificates, setCertificates] = useState<CertificateData[]>([]);
@@ -20,6 +23,7 @@ export default function AdminDashboard() {
   const [eventMessage, setEventMessage] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!member) return;
     async function load() {
       const health = await api.health();
       if (!health.success) {
@@ -88,6 +92,10 @@ export default function AdminDashboard() {
     setEventMessage(`Deleted "${eventName}" successfully.`);
     setDeletingEventId(null);
   };
+
+  if (!member) {
+    return <PublicLandingPage />;
+  }
 
   return (
     <div className="flex min-h-screen bg-[var(--color-background)]">

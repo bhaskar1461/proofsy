@@ -120,18 +120,40 @@ describe("Proofsy API Tests", () => {
     });
 
     it("should verify a valid certificate", async () => {
+      const { InstitutionSigningProvider, buildCanonicalPayload } = require("../src/services/signing");
+      const provider = new InstitutionSigningProvider();
+      await provider.init();
+
       const event = await Event.create({ name: "Test Event", date: new Date(), organizerName: "Acme", organizationId: org._id, workspaceId: workspace._id });
       const user = await User.create({ name: "Jane Doe", email: "jane@example.com" });
+      const verificationCode = "VALID-123";
+
       const cert = await Certificate.create({
         userId: user._id,
         eventId: event._id,
         organizationId: org._id,
         workspaceId: workspace._id,
-        verificationCode: "VALID-123",
-        status: "generated"
+        verificationCode,
+        status: "generated",
       });
 
-      const res = await request(app).get("/api/verify/VALID-123");
+      const canonicalPayload = buildCanonicalPayload({
+        recipientName: "Jane Doe",
+        recipientEmail: "jane@example.com",
+        eventName: "Test Event",
+        eventDate: event.date,
+        issuedAt: cert.createdAt,
+        verificationCode,
+        organizationId: org._id.toString(),
+        workspaceId: workspace._id.toString(),
+      });
+
+      const { signature, signingKeyId } = await provider.sign(canonicalPayload);
+      cert.cryptographicSignature = signature;
+      cert.signingKeyId = signingKeyId;
+      await cert.save();
+
+      const res = await request(app).get(`/api/verify/${verificationCode}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
       expect(res.body.data.isValid).toBe(true);

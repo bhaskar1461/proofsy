@@ -1,0 +1,6 @@
+name,email
+__proto__,proto1@evil.com
+constructor.prototype.isAdmin,proto2@evil.com
+{"__proto__":{"admin":true}},proto3@evil.com
+{"constructor":{"prototype":{"role":"owner"}}},proto4@evil.com
+__defineGetter__('admin', function(){return true}),proto5@evil.com

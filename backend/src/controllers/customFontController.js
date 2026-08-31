@@ -31,12 +31,28 @@ exports.uploadCustomFont = async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Only .ttf (TrueType Font) files are supported." });
     }
 
-    const fontsDir = path.join(__dirname, "../../storage/fonts");
+    // Magic bytes validation for TTF (0x00010000 or 'true') and OpenType TTF ('OTTO')
+    try {
+      const buffer = fs.readFileSync(req.file.path);
+      const magic = buffer.toString("hex", 0, 4);
+      const validMagics = ["00010000", "74727565", "4f54544f"];
+      if (!validMagics.includes(magic)) {
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+        return res.status(400).json({ success: false, error: "Uploaded file is not a valid TrueType font." });
+      }
+    } catch (readErr) {
+      if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(400).json({ success: false, error: "Failed to validate font file format." });
+    }
+
+    const fontsDir = path.join(__dirname, "../../storage/fonts", req.workspaceId.toString());
     if (!fs.existsSync(fontsDir)) {
       fs.mkdirSync(fontsDir, { recursive: true });
     }
 
-    const targetFileName = `${family}-${weight}.ttf`;
+    const safeFamily = family.replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeWeight = weight.replace(/[^a-zA-Z0-9_-]/g, "");
+    const targetFileName = `${safeFamily}-${safeWeight}.ttf`;
     const targetPath = path.join(fontsDir, targetFileName);
 
     // Save/move physical TTF file to storage
@@ -51,7 +67,7 @@ exports.uploadCustomFont = async (req, res, next) => {
       }
     }
 
-    const fontUrl = `/storage/fonts/${targetFileName}`;
+    const fontUrl = `/storage/fonts/${req.workspaceId.toString()}/${targetFileName}`;
 
     // Overwrite existing family+weight configuration or insert fresh
     let customFont = await CustomFont.findOne({
@@ -131,13 +147,15 @@ exports.deleteCustomFont = async (req, res, next) => {
       return res.status(404).json({ success: false, error: "Font not found or unauthorized." });
     }
 
-    // Unlink the physical file in storage
-    const fontsDir = path.join(__dirname, "../../storage/fonts");
-    const targetFileName = `${customFont.family}-${customFont.fontWeight}.ttf`;
+    // Unlink the physical file in workspace storage
+    const fontsDir = path.join(__dirname, "../../storage/fonts", req.workspaceId.toString());
+    const safeFamily = customFont.family.replace(/[^a-zA-Z0-9_-]/g, "");
+    const safeWeight = customFont.fontWeight.replace(/[^a-zA-Z0-9_-]/g, "");
+    const targetFileName = `${safeFamily}-${safeWeight}.ttf`;
     const filePath = path.join(fontsDir, targetFileName);
 
     if (fs.existsSync(filePath)) {
-      fs.unlinkSync(filePath);
+      try { fs.unlinkSync(filePath); } catch (e) {}
     }
 
     await customFont.deleteOne();

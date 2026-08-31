@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import { api, EventDetailData } from "@/lib/api";
 import { pageVariants, fadeUp, cardHover, cardTap } from "@/lib/animations";
@@ -14,6 +14,10 @@ interface Recipient {
   email: string;
 }
 
+interface ParsedCsvRow {
+  [key: string]: string;
+}
+
 export default function AddRecipientsPage() {
   const params = useParams();
   const router = useRouter();
@@ -21,7 +25,7 @@ export default function AddRecipientsPage() {
 
   const [event, setEvent] = useState<EventDetailData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"manual" | "csv" | "googleSheets">("csv");
+  const [tab, setTab] = useState<"csv" | "manual" | "googleSheets">("csv");
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
@@ -30,6 +34,13 @@ export default function AddRecipientsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Smart CSV Parsing State
+  const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
+  const [csvRows, setCsvRows] = useState<ParsedCsvRow[]>([]);
+  const [nameColumn, setNameColumn] = useState<string>("");
+  const [emailColumn, setEmailColumn] = useState<string>("");
+  const [csvPreviewOpen, setCsvPreviewOpen] = useState(false);
 
   // Google Sheets state
   const [googleSheetsConnected, setGoogleSheetsConnected] = useState(false);
@@ -63,6 +74,77 @@ export default function AddRecipientsPage() {
     load();
   }, [eventId]);
 
+  // Robust CSV Parser & Auto-column Detector
+  const parseCsvFile = async (uploadedFile: File) => {
+    try {
+      const text = await uploadedFile.text();
+      const lines = text.split(/\r\n|\n/).filter((l) => l.trim().length > 0);
+      if (lines.length === 0) return;
+
+      const headerLine = lines[0];
+      // Basic CSV token split supporting quoted commas
+      const headers = headerLine.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((h) => h.replace(/^"|"$/g, "").trim());
+      setCsvHeaders(headers);
+
+      const rows: ParsedCsvRow[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map((v) => v.replace(/^"|"$/g, "").trim());
+        const rowObj: ParsedCsvRow = {};
+        headers.forEach((h, idx) => {
+          rowObj[h] = values[idx] || "";
+        });
+        rows.push(rowObj);
+      }
+      setCsvRows(rows);
+
+      // Auto-detect Name Column
+      const detectedName = headers.find((h) => {
+        const low = h.toLowerCase();
+        return low.includes("name") || low.includes("recipient") || low.includes("student") || low.includes("attendee") || low.includes("participant");
+      }) || headers[0] || "";
+
+      // Auto-detect Email Column
+      const detectedEmail = headers.find((h) => {
+        const low = h.toLowerCase();
+        return low.includes("email") || low.includes("mail") || low.includes("e-mail") || low.includes("contact");
+      }) || (headers.length > 1 ? headers[1] : "");
+
+      setNameColumn(detectedName);
+      setEmailColumn(detectedEmail);
+      setCsvPreviewOpen(true);
+    } catch (err) {
+      console.error("Failed to parse CSV client-side", err);
+    }
+  };
+
+  const handleFileSelect = (selectedFile: File) => {
+    if (selectedFile && selectedFile.name.endsWith(".csv")) {
+      setFile(selectedFile);
+      parseCsvFile(selectedFile);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files?.[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const downloadSampleCsv = () => {
+    const csvData = "Name,Email,CompletionDate,Distinction\nBhaskar Sharma,bhaskarsharma0109@gmail.com,2026-08-30,Honors\nAlex Johnson,alex.johnson@example.com,2026-08-30,Pass\nPriya Patel,priya.patel@example.com,2026-08-30,Distinction\n";
+    const blob = new Blob([csvData], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "proofsy_recipients_template.csv";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const addRecipient = () => {
     if (!newName.trim() || !newEmail.trim()) return;
     setRecipients([...recipients, { id: Date.now().toString(), name: newName.trim(), email: newEmail.trim().toLowerCase() }]);
@@ -72,12 +154,6 @@ export default function AddRecipientsPage() {
 
   const removeRecipient = (id: string) => {
     setRecipients(recipients.filter((r) => r.id !== id));
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.[0]?.name.endsWith(".csv")) setFile(e.dataTransfer.files[0]);
   };
 
   const fetchSheetPreview = async () => {
@@ -104,14 +180,13 @@ export default function AddRecipientsPage() {
     setSubmitting(true);
     setResult(null);
 
-    // If Google Sheets, trigger custom endpoint
+    // If Google Sheets
     if (tab === "googleSheets") {
       try {
         const res = await api.importGoogleSheets(eventId);
         if (res.success) {
           setResult({ type: "success", message: res.message || "Recipients synced from Google Sheets and certificates queued!" });
           setSheetRecipients([]);
-          // Reload event data
           const updated = await api.getEvent(eventId);
           if (updated.success && updated.data) setEvent(updated.data);
         } else {
@@ -128,9 +203,23 @@ export default function AddRecipientsPage() {
 
     let csvFile = file;
 
+    // If CSV with mapped columns, build normalized CSV payload
+    if (tab === "csv" && csvRows.length > 0 && nameColumn && emailColumn) {
+      const normalizedLines = ["name,email"];
+      csvRows.forEach((row) => {
+        const rName = (row[nameColumn] || "").replace(/"/g, '""');
+        const rEmail = (row[emailColumn] || "").trim().toLowerCase();
+        if (rEmail && rEmail.includes("@")) {
+          normalizedLines.push(`"${rName}",${rEmail}`);
+        }
+      });
+      const blob = new Blob([normalizedLines.join("\n")], { type: "text/csv" });
+      csvFile = new File([blob], "normalized_recipients.csv", { type: "text/csv" });
+    }
+
     // If manual recipients, build a CSV
     if (tab === "manual" && recipients.length > 0) {
-      const csvContent = "name,email\n" + recipients.map((r) => `${r.name},${r.email}`).join("\n");
+      const csvContent = "name,email\n" + recipients.map((r) => `"${r.name.replace(/"/g, '""')}",${r.email}`).join("\n");
       const blob = new Blob([csvContent], { type: "text/csv" });
       csvFile = new File([blob], "recipients.csv", { type: "text/csv" });
     }
@@ -143,10 +232,10 @@ export default function AddRecipientsPage() {
 
     const res = await api.generateCertificates(eventId, csvFile);
     if (res.success) {
-      setResult({ type: "success", message: res.data?.message || "Recipients added and certificates queued!" });
+      setResult({ type: "success", message: res.data?.message || "Recipients added and certificates queued for instant generation!" });
       setFile(null);
+      setCsvRows([]);
       setRecipients([]);
-      // Reload event data
       const updated = await api.getEvent(eventId);
       if (updated.success && updated.data) setEvent(updated.data);
     } else {
@@ -155,6 +244,8 @@ export default function AddRecipientsPage() {
 
     setSubmitting(false);
   };
+
+  const validCsvCount = csvRows.filter((r) => emailColumn && r[emailColumn] && r[emailColumn].includes("@")).length;
 
   if (loading) {
     return (
@@ -195,12 +286,22 @@ export default function AddRecipientsPage() {
                 <Link href={`/events/${eventId}`} className="text-[var(--color-muted)] hover:text-[var(--color-foreground)]">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
                 </Link>
-                <h2 className="text-xl font-bold text-[var(--color-foreground)]">Add Recipients</h2>
+                <h2 className="text-xl font-bold text-[var(--color-foreground)]">Smart Recipient Importer</h2>
               </div>
               <p className="text-sm text-[var(--color-muted)]">
-                Add more recipients to <span className="font-semibold text-[var(--color-foreground)]">{event.name}</span> · {event.certificates.length} existing certificates
+                Add recipients to <span className="font-semibold text-[var(--color-foreground)]">{event.name}</span> · {event.certificates.length} issued certificates
               </p>
             </div>
+
+            <button
+              onClick={downloadSampleCsv}
+              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl border border-[var(--color-border)] bg-white hover:bg-gray-50 text-[var(--color-foreground)] shadow-sm cursor-pointer"
+            >
+              <svg className="w-3.5 h-3.5 text-[var(--color-primary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+              </svg>
+              Download Sample CSV
+            </button>
           </div>
         </header>
 
@@ -210,7 +311,7 @@ export default function AddRecipientsPage() {
             <div className={`rounded-xl px-5 py-3 text-sm font-medium ${result.type === "success" ? "bg-[var(--color-success-bg)] text-[var(--color-success)]" : "bg-[var(--color-error-bg)] text-[var(--color-error)]"}`}>
               {result.message}
               {result.type === "success" && (
-                <button onClick={() => router.push(`/events/${eventId}`)} className="ml-3 underline font-semibold">
+                <button onClick={() => router.push(`/events/${eventId}`)} className="ml-3 underline font-semibold cursor-pointer">
                   View Event →
                 </button>
               )}
@@ -219,43 +320,149 @@ export default function AddRecipientsPage() {
 
           {/* Tab switcher */}
           <div className="flex gap-1 bg-[var(--color-surface-alt)] p-1 rounded-xl w-fit">
-            <motion.button onClick={() => setTab("csv")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "csv" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
-              Upload CSV
+            <motion.button onClick={() => setTab("csv")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer ${tab === "csv" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
+              Smart CSV Batch Upload
             </motion.button>
-            <motion.button onClick={() => setTab("manual")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "manual" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
+            <motion.button onClick={() => setTab("manual")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer ${tab === "manual" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
               Add Manually
             </motion.button>
-            <motion.button onClick={() => setTab("googleSheets")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-medium cursor-pointer ${tab === "googleSheets" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
-              Google Sheets
+            <motion.button onClick={() => setTab("googleSheets")} whileHover={cardHover} whileTap={cardTap} className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer ${tab === "googleSheets" ? "bg-[var(--color-surface)] shadow-sm text-[var(--color-foreground)]" : "text-[var(--color-muted)]"}`}>
+              Google Sheets Live Sync
             </motion.button>
           </div>
 
-          {/* CSV Upload */}
+          {/* CSV Upload Tab */}
           {tab === "csv" && (
-            <motion.div variants={fadeUp} initial="hidden" animate="visible" className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 space-y-4">
+            <motion.div variants={fadeUp} initial="hidden" animate="visible" className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] p-6 space-y-6">
               <div
-                className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer
-                  ${isDragging ? "border-[var(--color-primary)] bg-[var(--color-primary-faint)]" : file ? "border-[var(--color-success)] bg-[var(--color-success-bg)]" : "border-[var(--color-border)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-alt)]"}`}
+                className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all
+                  ${isDragging ? "border-[var(--color-primary)] bg-[var(--color-primary-faint)] scale-[1.01]" : file ? "border-[var(--color-success)] bg-[var(--color-success-bg)]/40" : "border-[var(--color-border)] hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-surface-alt)]/30"}`}
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
                 onDrop={handleDrop}
                 onClick={() => fileInputRef.current?.click()}
               >
-                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && setFile(e.target.files[0])} />
+                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileSelect(e.target.files[0])} />
                 {file ? (
                   <div className="flex flex-col items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-[var(--color-success)] flex items-center justify-center"><svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg></div>
-                    <p className="text-sm font-semibold text-[var(--color-success)]">{file.name}</p>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); setFile(null); }} className="text-xs text-[var(--color-error)] hover:underline cursor-pointer">Remove</button>
+                    <div className="w-12 h-12 rounded-full bg-[var(--color-success)] flex items-center justify-center text-white shadow-sm">
+                      <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>
+                    </div>
+                    <p className="text-sm font-bold text-[var(--color-foreground)]">{file.name}</p>
+                    <p className="text-xs text-[var(--color-success)] font-semibold">{csvRows.length} rows loaded · {validCsvCount} valid emails detected</p>
+                    <button type="button" onClick={(e) => { e.stopPropagation(); setFile(null); setCsvRows([]); setCsvHeaders([]); }} className="text-xs text-[var(--color-error)] hover:underline cursor-pointer mt-1">
+                      Choose another CSV file
+                    </button>
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-2">
-                    <svg className="w-8 h-8 text-[var(--color-muted)]" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
-                    <p className="text-sm">Drop CSV here or <span className="text-[var(--color-primary)] font-medium">browse</span></p>
-                    <p className="text-xs text-[var(--color-muted)]">Required columns: name, email</p>
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center text-[var(--color-primary)] border border-blue-100 shadow-sm">
+                      <svg className="w-7 h-7" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m3.75 9v6m3-3H9m1.5-12H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                      </svg>
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-[var(--color-foreground)]">Drop recipient spreadsheet here, or <span className="text-[var(--color-primary)] font-bold hover:underline">browse</span></p>
+                      <p className="text-xs text-[var(--color-muted)] mt-1">Supports any CSV format with custom column names</p>
+                    </div>
                   </div>
                 )}
               </div>
+
+              {/* Column Mapping & Validation Section */}
+              {csvRows.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 border-t border-[var(--color-border)] pt-5">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-[var(--color-foreground)]">Smart Column Mapper</h3>
+                      <p className="text-xs text-[var(--color-muted)]">Verify columns before certificate generation</p>
+                    </div>
+                    <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      ✓ {validCsvCount} Ready to Issue
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--color-surface-alt)] p-4 rounded-xl border border-[var(--color-border)]">
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
+                        Recipient Name Column <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={nameColumn}
+                        onChange={(e) => setNameColumn(e.target.value)}
+                        className="w-full bg-white border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-[var(--color-primary)]"
+                      >
+                        {csvHeaders.map((h) => (
+                          <option key={h} value={h}>
+                            Column: {h} (e.g. &quot;{csvRows[0]?.[h] || ""}&quot;)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
+                        Recipient Email Column <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        value={emailColumn}
+                        onChange={(e) => setEmailColumn(e.target.value)}
+                        className="w-full bg-white border border-[var(--color-border)] rounded-xl px-3.5 py-2.5 text-sm font-medium focus:outline-none focus:border-[var(--color-primary)]"
+                      >
+                        {csvHeaders.map((h) => (
+                          <option key={h} value={h}>
+                            Column: {h} (e.g. &quot;{csvRows[0]?.[h] || ""}&quot;)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Interactive CSV Preview Table */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-[var(--color-muted)]">
+                      <span className="font-semibold uppercase tracking-wider text-[10px]">Data Preview (First 5 Rows)</span>
+                      <span>Total {csvRows.length} Rows</span>
+                    </div>
+
+                    <div className="border border-[var(--color-border)] rounded-xl overflow-hidden bg-white">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-[var(--color-surface-alt)] border-b border-[var(--color-border)]">
+                          <tr>
+                            <th className="px-4 py-2 font-bold text-[var(--color-muted)]">#</th>
+                            <th className="px-4 py-2 font-bold text-[var(--color-primary)]">Mapped Name ({nameColumn})</th>
+                            <th className="px-4 py-2 font-bold text-[var(--color-primary)]">Mapped Email ({emailColumn})</th>
+                            <th className="px-4 py-2 font-bold text-[var(--color-muted)]">Validation Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[var(--color-border)]">
+                          {csvRows.slice(0, 5).map((row, idx) => {
+                            const isEmailValid = row[emailColumn] && row[emailColumn].includes("@");
+                            return (
+                              <tr key={idx} className="hover:bg-slate-50">
+                                <td className="px-4 py-2.5 font-mono text-[var(--color-muted)]">{idx + 1}</td>
+                                <td className="px-4 py-2.5 font-semibold text-[var(--color-foreground)]">{row[nameColumn] || "—"}</td>
+                                <td className="px-4 py-2.5 text-[var(--color-muted)] font-mono">{row[emailColumn] || "—"}</td>
+                                <td className="px-4 py-2.5">
+                                  {isEmailValid ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                      ✓ Valid
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">
+                                      ⚠ Missing Email
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
@@ -394,24 +601,24 @@ export default function AddRecipientsPage() {
 
           {/* Actions */}
           <div className="flex items-center justify-between">
-            <Link href={`/events/${eventId}`} className="px-5 py-2.5 border border-[var(--color-border)] rounded-xl text-sm font-medium hover:bg-[var(--color-surface-alt)]">
+            <Link href={`/events/${eventId}`} className="px-5 py-2.5 border border-[var(--color-border)] rounded-xl text-sm font-semibold hover:bg-[var(--color-surface-alt)] text-[var(--color-foreground)]">
               ← Back to Event
             </Link>
             <motion.button
               onClick={handleSubmit}
-              disabled={submitting || (tab === "csv" ? !file : tab === "manual" ? recipients.length === 0 : sheetRecipients.length === 0)}
+              disabled={submitting || (tab === "csv" ? csvRows.length === 0 || validCsvCount === 0 : tab === "manual" ? recipients.length === 0 : sheetRecipients.length === 0)}
               whileTap={cardTap}
               className="bg-[var(--color-primary)] text-white px-6 py-2.5 rounded-xl font-semibold text-sm hover:bg-[var(--color-primary-dark)] cursor-pointer shadow-sm flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  Syncing...
+                  Generating & Signing...
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0ZM3 19.235v-.11a6.375 6.375 0 0 1 12.75 0v.109A12.318 12.318 0 0 1 9.374 21c-2.331 0-4.512-.645-6.374-1.766Z" /></svg>
-                  {tab === "googleSheets" ? "Sync & Generate Certificates" : "Add Recipients & Generate Certificates"}
+                  {tab === "googleSheets" ? "Sync & Generate Certificates" : `Issue Certificates to ${tab === "csv" ? validCsvCount : recipients.length} Recipients`}
                 </>
               )}
             </motion.button>

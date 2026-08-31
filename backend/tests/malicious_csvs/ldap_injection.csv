@@ -1,0 +1,4 @@
+name,email
+*()|&',ldap1@evil.com
+admin)(&),ldap2@evil.com
+*)((|(objectclass=*),ldap3@evil.com

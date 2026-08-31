@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import RevocationModal from "@/components/RevocationModal";
+import CSVImportWizard from "@/components/CSVImportWizard";
 import { api, EventDetailData, BACKEND_URL } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, tableRow, pulseGlow, cardTap } from "@/lib/animations";
 
@@ -25,6 +26,7 @@ export default function EventDetailPage() {
     certificateId?: string;
     recipientPreview?: string;
   } | null>(null);
+  const [showCSVWizard, setShowCSVWizard] = useState(false);
 
   const eventId = Array.isArray(params.id) ? params.id[0] : params.id;
 
@@ -165,6 +167,14 @@ export default function EventDetailPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <motion.button
+                    whileTap={cardTap}
+                    onClick={() => setShowCSVWizard(true)}
+                    className="border border-emerald-200 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-emerald-100 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" /></svg>
+                    Import CSV
+                  </motion.button>
                   <motion.div whileTap={cardTap}>
                     <Link
                       href={`/events/${eventId}/add-recipients`}
@@ -371,6 +381,16 @@ export default function EventDetailPage() {
         onCancel={() => setRevokeTarget(null)}
         onConfirm={confirmRevocation}
       />
+      <AnimatePresence>
+        {showCSVWizard && event && (
+          <CSVImportWizard
+            eventId={eventId as string}
+            eventName={event.name}
+            onComplete={() => loadEvent()}
+            onClose={() => setShowCSVWizard(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

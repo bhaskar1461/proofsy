@@ -1,6 +1,6 @@
 const Certificate = require("../models/Certificate");
 const Workspace = require("../models/Workspace");
-const { verifyCertificateSignature, getPublicKeyPem } = require("../services/signatureService");
+const { getSigningProvider, toIsoUtc } = require("../services/signing");
 
 const defaultBranding = {
   logo: "",
@@ -11,6 +11,16 @@ const defaultBranding = {
   verificationPageTitle: "",
   footerText: "",
 };
+
+function maskEmail(email) {
+  if (!email || typeof email !== "string" || !email.includes("@")) return "";
+  const [localPart, domain] = email.split("@");
+  if (localPart.length <= 2) {
+    return `${localPart[0]}*@${domain}`;
+  }
+  const maskedLocal = `${localPart[0]}${"*".repeat(Math.min(localPart.length - 2, 4))}${localPart[localPart.length - 1]}`;
+  return `${maskedLocal}@${domain}`;
+}
 
 function normalizeBranding(workspace) {
   const rawBranding = workspace?.branding;
@@ -27,23 +37,30 @@ function normalizeBranding(workspace) {
   };
 }
 
-function serializeCertificate(certificate, isSignatureValid = false) {
+function serializeCertificate(certificate, isSignatureValid = false, exposeFullEmail = false) {
+  const rawEmail = certificate.userId?.email || "";
+  const displayEmail = exposeFullEmail ? rawEmail : maskEmail(rawEmail);
+
   return {
     recipientName: certificate.userId?.name || "Unknown",
-    recipientEmail: certificate.userId?.email || "",
+    recipientEmail: displayEmail,
     eventName: certificate.eventId?.name || "Unknown Event",
-    eventDate: certificate.eventId?.date?.toISOString() || null,
+    eventDate: certificate.eventId?.date ? toIsoUtc(certificate.eventId.date) : null,
     organizerName: certificate.eventId?.organizerName || "",
-    issuedAt: certificate.createdAt.toISOString(),
-    expiresAt: certificate.expiresAt ? certificate.expiresAt.toISOString() : null,
-    revokedAt: certificate.revokedAt ? certificate.revokedAt.toISOString() : null,
+    issuedAt: toIsoUtc(certificate.createdAt) || new Date().toISOString(),
+    expiresAt: certificate.expiresAt ? toIsoUtc(certificate.expiresAt) : null,
+    revokedAt: certificate.revokedAt ? toIsoUtc(certificate.revokedAt) : null,
     revocationReason: certificate.revocationReason || "",
-    suspendedAt: certificate.suspendedAt ? certificate.suspendedAt.toISOString() : null,
+    suspendedAt: certificate.suspendedAt ? toIsoUtc(certificate.suspendedAt) : null,
     status: certificate.status,
     pdfUrl: certificate.pdfUrl,
     pngUrl: certificate.pngUrl || null,
     svgUrl: certificate.svgUrl || null,
     cryptographicSignature: certificate.cryptographicSignature || null,
+    signingProvider: certificate.signingProvider || "institution",
+    signingKeyId: certificate.signingKeyId || null,
+    signatureAlgorithm: certificate.signatureAlgorithm || "RSA-SHA256",
+    signedAt: certificate.signedAt ? toIsoUtc(certificate.signedAt) : (certificate.createdAt ? toIsoUtc(certificate.createdAt) : null),
     isCryptographicallyVerified: isSignatureValid,
   };
 }
@@ -55,15 +72,16 @@ function invalidVerificationResponse(res, reason, certificate, branding) {
       isValid: false,
       reason,
       branding,
-      certificate: serializeCertificate(certificate),
+      certificate: serializeCertificate(certificate, false),
     },
   });
 }
 
 // GET /api/verify/:code
+// GET /api/verify/:workspaceSlug/:code
 exports.verifyCertificate = async (req, res) => {
   try {
-    const { code } = req.params;
+    const { code, workspaceSlug } = req.params;
 
     const certificate = await Certificate.findOne({
       verificationCode: code.toUpperCase(),
@@ -78,8 +96,16 @@ exports.verifyCertificate = async (req, res) => {
       });
     }
 
-    const workspace = await Workspace.findById(certificate.workspaceId).select("name branding").lean();
+    const workspace = await Workspace.findById(certificate.workspaceId).select("name branding slug").lean();
     const branding = normalizeBranding(workspace);
+
+    // Tenant Scoping Guard: reject if accessing via another tenant's branded slug
+    if (workspaceSlug && workspace?.slug && workspace.slug.toLowerCase() !== workspaceSlug.toLowerCase()) {
+      return res.status(404).json({
+        success: false,
+        error: "Certificate not found under this workspace portal.",
+      });
+    }
 
     const now = new Date();
     if (certificate.status === "revoked") {
@@ -140,23 +166,41 @@ exports.verifyCertificate = async (req, res) => {
       }
     }
 
-    // Construct deterministic validation payload
-    const payload = {
+    // Cryptographic signature verification via SigningProvider
+    const claims = {
       verificationCode: certificate.verificationCode,
       recipientName: certificate.userId?.name || "Unknown",
       recipientEmail: certificate.userId?.email || "",
       eventName: certificate.eventId?.name || "Unknown Event",
-      issuedAt: certificate.createdAt.toISOString()
+      eventDate: certificate.eventId?.date,
+      organizationId: certificate.organizationId || certificate.eventId?.organizationId,
+      issuedAt: certificate.createdAt,
+      expiresAt: certificate.expiresAt || null,
     };
 
-    const isSignatureValid = verifyCertificateSignature(payload, certificate.cryptographicSignature);
+    const signingProvider = getSigningProvider(certificate.signingProvider || "institution");
+    const verifyResult = await signingProvider.verify(claims, certificate.cryptographicSignature, {
+      keyId: certificate.signingKeyId,
+      legacy: !certificate.signingKeyId, // if legacy cert without keyId, use legacy payload mode
+    });
+
+    const isSignatureValid = verifyResult.isValid;
+
+    // Cryptographic validation gate: If signature does not verify, mark entire response invalid
+    if (!isSignatureValid) {
+      return invalidVerificationResponse(
+        res,
+        verifyResult.error || "Cryptographic signature verification failed (data altered or invalid signing key)",
+        certificate,
+        branding
+      );
+    }
 
     // Record Verification Audit Event asynchronously
     (async () => {
       try {
         const VerificationAudit = require("../models/VerificationAudit");
         
-        // Parse referral source
         const referer = req.headers.referer || req.headers.referrer || "";
         const queryRef = req.query.ref || "";
         let referralSource = "direct";
@@ -171,7 +215,6 @@ exports.verifyCertificate = async (req, res) => {
           referralSource = "offline";
         }
         
-        // Parse User-Agent
         const ua = req.headers["user-agent"] || "";
         let deviceType = "desktop";
         let browser = "Other";
@@ -213,7 +256,7 @@ exports.verifyCertificate = async (req, res) => {
           deviceType,
           browser,
           os,
-          country: "Unknown"
+          country: "Unknown",
         });
       } catch (auditErr) {
         console.error("[API] Failed to record verification audit:", auditErr);
@@ -234,18 +277,42 @@ exports.verifyCertificate = async (req, res) => {
   }
 };
 
-// GET /api/verify/public-key
+// GET /api/verify/public-key?keyId=
 exports.getPublicKey = async (req, res) => {
   try {
-    const publicKey = getPublicKeyPem();
+    const { keyId } = req.query;
+    const provider = getSigningProvider("institution");
+    const resolvedKeyId = keyId || provider.getActiveKeyId();
+    const publicKey = provider.getPublicKey(resolvedKeyId);
+    const metadata = provider.getKeyMetadata(resolvedKeyId);
+
     return res.json({
       success: true,
       data: {
+        keyId: resolvedKeyId,
+        algorithm: metadata?.algorithm || "RSA-SHA256",
+        fingerprint: metadata?.fingerprint || "",
+        status: metadata?.status || "active",
         publicKey,
       },
     });
   } catch (err) {
     console.error("getPublicKey error:", err);
+    return res.status(500).json({ success: false, error: err.message || "Internal server error" });
+  }
+};
+
+// GET /api/verify/public-keys
+exports.listPublicKeys = async (req, res) => {
+  try {
+    const provider = getSigningProvider("institution");
+    const keys = provider.listPublicKeys();
+    return res.json({
+      success: true,
+      data: keys,
+    });
+  } catch (err) {
+    console.error("listPublicKeys error:", err);
     return res.status(500).json({ success: false, error: "Internal server error" });
   }
 };

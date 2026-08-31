@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { motion } from "framer-motion";
-import { BACKEND_URL, TextLayer, QrCodeConfig, api, CustomFontData } from "@/lib/api";
+import { BACKEND_URL, TextLayer, QrCodeConfig, api, CustomFontData, getAssetUrl } from "@/lib/api";
 import { fadeUp, cardTap } from "@/lib/animations";
 
 const AVAILABLE_VARIABLES: { variable: TextLayer["variable"]; label: string; defaultText: string }[] = [
@@ -300,7 +300,7 @@ export default function TemplateEditor({
     }
   };
 
-  const fullBgUrl = backgroundUrl.startsWith("http") ? backgroundUrl : `${BACKEND_URL}${backgroundUrl}`;
+  const fullBgUrl = getAssetUrl(backgroundUrl);
 
   return (
     <div className="flex gap-6 flex-col lg:flex-row">

@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Proofsy Video Slides</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: #090D16; color: #F8FAFC; overflow: hidden; width: 1920px; height: 1080px; }
+
+    .slide {
+      width: 1920px;
+      height: 1080px;
+      position: absolute;
+      top: 0;
+      left: 0;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      background: radial-gradient(circle at 50% 30%, #1E1B4B 0%, #090D16 70%);
+      padding: 80px;
+    }
+    .slide.active { display: flex; }
+
+    .glow-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(100px);
+      opacity: 0.4;
+      pointer-events: none;
+      animation: pulse 6s infinite alternate ease-in-out;
+    }
+    .glow-1 { width: 600px; height: 600px; background: #6366F1; top: -100px; right: 100px; }
+    .glow-2 { width: 500px; height: 500px; background: #3B82F6; bottom: -50px; left: 150px; }
+
+    @keyframes pulse {
+      0% { transform: scale(1) translate(0, 0); opacity: 0.35; }
+      100% { transform: scale(1.15) translate(30px, -20px); opacity: 0.55; }
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 24px;
+      background: rgba(99, 102, 241, 0.12);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: 9999px;
+      color: #818CF8;
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      margin-bottom: 32px;
+      backdrop-filter: blur(10px);
+    }
+
+    .badge-dot {
+      width: 8px;
+      height: 8px;
+      background: #10B981;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #10B981;
+    }
+
+    h1.hero-title {
+      font-size: 64px;
+      font-weight: 800;
+      line-height: 1.15;
+      text-align: center;
+      max-width: 1300px;
+      letter-spacing: -1.5px;
+      background: linear-gradient(180deg, #FFFFFF 0%, #CBD5E1 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 24px;
+    }
+
+    p.hero-sub {
+      font-size: 24px;
+      color: #94A3B8;
+      text-align: center;
+      max-width: 900px;
+      line-height: 1.5;
+    }
+
+    /* Scene 8 Grid */
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 32px;
+      max-width: 1400px;
+      width: 100%;
+      margin-top: 48px;
+    }
+
+    .metric-card {
+      background: rgba(30, 41, 59, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 28px;
+      padding: 40px;
+      text-align: center;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
+      position: relative;
+      overflow: hidden;
+    }
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 3px;
+      background: linear-gradient(90deg, #6366F1, #38BDF8);
+    }
+
+    .metric-val {
+      font-size: 64px;
+      font-weight: 800;
+      font-family: 'JetBrains Mono', monospace;
+      color: #F8FAFC;
+      letter-spacing: -2px;
+      margin-bottom: 12px;
+    }
+    .metric-val.emerald { color: #34D399; }
+    .metric-val.indigo { color: #818CF8; }
+    .metric-val.sky { color: #38BDF8; }
+
+    .metric-label {
+      font-size: 16px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #94A3B8;
+      margin-bottom: 8px;
+    }
+
+    .metric-desc {
+      font-size: 15px;
+      color: #64748B;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Slide 1: Hook -->
+  <div id="slide-1" class="slide active">
+    <div class="glow-orb glow-1"></div>
+    <div class="glow-orb glow-2"></div>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Cryptographic Credential Infrastructure
+    </div>
+    <h1 class="hero-title">
+      Millions of certificates are issued every year.<br>
+      <span style="background: linear-gradient(90deg, #F43F5E 0%, #FB7185 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Almost none can be verified in under 5 minutes.</span>
+    </h1>
+    <p class="hero-sub">
+      Proofsy fixes certificate fraud with instant mathematical RSA cryptographic proofs.
+    </p>
+  </div>
+
+  <!-- Slide 8: Reliability & Benchmarks -->
+  <div id="slide-8" class="slide">
+    <div class="glow-orb glow-1"></div>
+    <div class="glow-orb glow-2"></div>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Battle-Tested Reliability & Scale
+    </div>
+    <h1 class="hero-title">
+      Audited at 10,000-Certificate Scale
+    </h1>
+    <p class="hero-sub">
+      Every signing and verification path is mathematically and empirically validated before it ships.
+    </p>
+    <div class="metric-grid">
+      <div class="metric-card">
+        <div class="metric-val emerald">1,325</div>
+        <div class="metric-label">Correctness Tests Passed</div>
+        <div class="metric-desc">Generative property tests across Unicode, RTL, injection, & tampering</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val sky">673 <span style="font-size: 28px; font-weight: 600;">certs/sec</span></div>
+        <div class="metric-label">Live Issuance Throughput</div>
+        <div class="metric-desc">10,000 certificates issued in 14.71s with 42ms median latency</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-val indigo">0.000%</div>
+        <div class="metric-label">Failure / Tamper Rate</div>
+        <div class="metric-desc">100% genuine verified & 100% tampered records mathematically rejected</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function showSlide(num) {
+      document.querySelectorAll('.slide').forEach(s => s.classList.remove('active'));
+      const target = document.getElementById('slide-' + num);
+      if (target) target.classList.add('active');
+    }
+  </script>
+</body>
+</html>

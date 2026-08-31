@@ -82,3 +82,52 @@ body {
 .animate-shake {
   animation: shake 0.4s ease-in-out;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Proofsy Mobile & Responsive Layout Styles
+   ══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 767px) {
+  /* Push headers left-padding to prevent overlapping the floating hamburger button */
+  main > header,
+  header.sticky,
+  header {
+    padding-left: 4.5rem !important;
+    padding-right: 1rem !important;
+    padding-top: 0.875rem !important;
+    padding-bottom: 0.875rem !important;
+  }
+
+  /* Make page headers wrap beautifully if they contain multiple actions */
+  main > header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  /* Adjust main content areas */
+  main > div.px-8,
+  main > div.p-8,
+  main > div.py-8 {
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+    padding-top: 1.5rem !important;
+    padding-bottom: 1.5rem !important;
+  }
+
+  /* Ensure detail stat columns stack properly on small phone viewports */
+  .grid-cols-3 {
+    grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+  }
+}
+
+/* Responsive Table Wrapper helper to enable horizontal scrolling on small screens */
+.responsive-table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 0.75rem;
+}
+
+.responsive-table-wrapper table {
+  min-width: 700px;
+}

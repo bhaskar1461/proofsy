@@ -19,12 +19,14 @@ const upload = multer({
   limits: { fileSize: 20 * 1024 * 1024 }, // 20MB
 });
 
-const { protect } = require("../middleware/auth");
-const { tenantProtect } = require("../middleware/tenantProtect");
+const { protect, protectOptional } = require("../middleware/auth");
+const { tenantProtect, restrictToRoles } = require("../middleware/tenantProtect");
 
 router.post("/", protect, tenantProtect, upload.single("background"), templateController.createTemplate);
+router.post("/from-image", protectOptional, upload.single("image"), templateController.createFromImage);
+router.post("/import", protectOptional, templateController.importTemplate);
 router.get("/", protect, tenantProtect, templateController.listTemplates);
-router.post("/seed", templateController.seedStarterTemplates);
+router.post("/seed", protect, tenantProtect, restrictToRoles("owner", "admin"), templateController.seedStarterTemplates);
 router.get("/:id", protect, tenantProtect, templateController.getTemplate);
 router.put("/:id", protect, tenantProtect, upload.single("background"), templateController.updateTemplate);
 router.delete("/:id", protect, tenantProtect, templateController.deleteTemplate);

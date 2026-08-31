@@ -10,8 +10,9 @@ const Event = require("../models/Event");
 const Template = require("../models/Template");
 const Organization = require("../models/Organization");
 const Workspace = require("../models/Workspace");
+const IssuanceBatch = require("../models/IssuanceBatch");
 const { getFontBuffer } = require("../services/fontService");
-const { signCertificateData } = require("../services/signatureService");
+const { getSigningProvider } = require("../services/signing");
 const storageService = require("../services/storageService");
 
 // Draw rounded rectangle helper for custom Finder patterns
@@ -29,135 +30,42 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
   ctx.closePath();
 }
 
-// Generate premium circular branded styled QR Code
+// Generate ultra-crisp, instantly scannable ISO/IEC 18004 compliant QR Code with white quiet-zone card
 async function generatePremiumQRCode(text, size, themeColor = "#2563eb") {
-  const qr = QRCode.create(text, { errorCorrectionLevel: 'H' });
-  const count = qr.modules.size;
-  
-  const scale = 4; // High-res scaling for sharp PDF rendering
+  // Generate high-resolution, high-contrast standard QR Code PNG
+  const qrBuffer = await QRCode.toBuffer(text, {
+    errorCorrectionLevel: 'M',
+    type: 'png',
+    margin: 1,
+    scale: 8,
+    color: {
+      dark: '#000000', // Pure black modules for instant sub-second recognition on all camera sensors
+      light: '#FFFFFF', // Pure white quiet zone
+    },
+  });
+
+  const scale = 4;
   const canvasSize = size * scale;
   const canvas = createCanvas(canvasSize, canvasSize);
   const ctx = canvas.getContext('2d');
-  
-  // Background circle
-  ctx.fillStyle = "#FFFFFF";
-  ctx.beginPath();
-  ctx.arc(canvasSize / 2, canvasSize / 2, canvasSize / 2, 0, Math.PI * 2);
-  ctx.fill();
-  
-  // Outer elegant colored circle border
-  ctx.strokeStyle = themeColor;
-  ctx.lineWidth = 3 * scale;
-  ctx.beginPath();
-  ctx.arc(canvasSize / 2, canvasSize / 2, (canvasSize / 2) - (4 * scale), 0, Math.PI * 2);
-  ctx.stroke();
 
-  // Dynamic aesthetic dashed ring
-  ctx.strokeStyle = themeColor;
+  const qrImage = await loadImage(qrBuffer);
+
+  // 1. Clean white card container with rounded corners
+  const radius = 6 * scale;
+  ctx.fillStyle = '#FFFFFF';
+  drawRoundedRect(ctx, 0, 0, canvasSize, canvasSize, radius);
+  ctx.fill();
+
+  // 2. Crisp subtle border
+  ctx.strokeStyle = '#E2E8F0'; // Clean Slate-200 border
   ctx.lineWidth = 1.5 * scale;
-  ctx.setLineDash([4 * scale, 6 * scale]);
-  ctx.beginPath();
-  ctx.arc(canvasSize / 2, canvasSize / 2, (canvasSize / 2) - (8 * scale), 0, Math.PI * 2);
+  drawRoundedRect(ctx, 0.75 * scale, 0.75 * scale, canvasSize - 1.5 * scale, canvasSize - 1.5 * scale, radius);
   ctx.stroke();
-  ctx.setLineDash([]); // Reset dash
 
-  // Calculate cell size leaving margin for border
-  const qrMargin = 14 * scale;
-  const qrSize = canvasSize - (qrMargin * 2);
-  const cellSize = qrSize / count;
-
-  // Finder pattern regions boundaries
-  const isFinderPattern = (r, c) => {
-    if (r >= 0 && r <= 6 && c >= 0 && c <= 6) return true;
-    if (r >= 0 && r <= 6 && c >= count - 7 && c <= count - 1) return true;
-    if (r >= count - 7 && r <= count - 1 && c >= 0 && c <= 6) return true;
-    return false;
-  };
-
-  // Center logo region boundary (middle 30% of matrix)
-  const centerStart = Math.floor(count * 0.35);
-  const centerEnd = Math.ceil(count * 0.65);
-  const isInCenterLogo = (r, c) => {
-    return r >= centerStart && r <= centerEnd && c >= centerStart && c <= centerEnd;
-  };
-
-  // Draw regular modules as premium rounded dots
-  ctx.fillStyle = themeColor;
-  for (let r = 0; r < count; r++) {
-    for (let c = 0; c < count; c++) {
-      if (qr.modules.get(r, c)) {
-        if (isFinderPattern(r, c)) continue;
-        if (isInCenterLogo(r, c)) continue;
-
-        const posX = qrMargin + c * cellSize + cellSize / 2;
-        const posY = qrMargin + r * cellSize + cellSize / 2;
-        const radius = (cellSize / 2) * 0.85;
-
-        ctx.beginPath();
-        ctx.arc(posX, posY, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  // Draw modern rounded-corner finder patterns
-  const drawCustomFinder = (startX, startY) => {
-    ctx.fillStyle = themeColor;
-    const outerX = qrMargin + startX * cellSize;
-    const outerY = qrMargin + startY * cellSize;
-    const outerW = 7 * cellSize;
-    const radius = 1.5 * cellSize;
-
-    drawRoundedRect(ctx, outerX, outerY, outerW, outerW, radius);
-    ctx.fill();
-
-    ctx.fillStyle = "#FFFFFF";
-    const midX = outerX + cellSize;
-    const midY = outerY + cellSize;
-    const midW = 5 * cellSize;
-    const midRadius = 1.0 * cellSize;
-
-    drawRoundedRect(ctx, midX, midY, midW, midW, midRadius);
-    ctx.fill();
-
-    ctx.fillStyle = themeColor;
-    const innerX = outerX + 2 * cellSize;
-    const innerY = outerY + 2 * cellSize;
-    const innerW = 3 * cellSize;
-    const innerRadius = 0.5 * cellSize;
-
-    drawRoundedRect(ctx, innerX, innerY, innerW, innerW, innerRadius);
-    ctx.fill();
-  };
-
-  drawCustomFinder(0, 0);
-  drawCustomFinder(count - 7, 0);
-  drawCustomFinder(0, count - 7);
-
-  // Center circular brand badge
-  const centerSize = (centerEnd - centerStart + 1) * cellSize;
-  const logoCenterX = qrMargin + (centerStart + (centerEnd - centerStart) / 2) * cellSize + cellSize / 2;
-  const logoCenterY = qrMargin + (centerStart + (centerEnd - centerStart) / 2) * cellSize + cellSize / 2;
-  const logoRadius = (centerSize / 2) * 1.15;
-
-  // Solid background circle for logo
-  ctx.fillStyle = "#FFFFFF";
-  ctx.beginPath();
-  ctx.arc(logoCenterX, logoCenterY, logoRadius, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Solid theme circle
-  ctx.fillStyle = themeColor;
-  ctx.beginPath();
-  ctx.arc(logoCenterX, logoCenterY, logoRadius * 0.82, 0, Math.PI * 2);
-  ctx.fill();
-
-  // White "P" badge
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = `bold ${logoRadius * 1.1}px Arial, sans-serif`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("P", logoCenterX, logoCenterY);
+  // 3. Draw standard crisp QR code inside the card with balanced padding
+  const padding = 4 * scale;
+  ctx.drawImage(qrImage, padding, padding, canvasSize - (padding * 2), canvasSize - (padding * 2));
 
   return canvas.toBuffer('image/png');
 }
@@ -209,7 +117,6 @@ async function generatePremiumPNG(template, user, event, certificate, themeColor
         const fontBuffer = await getFontBuffer(layer.fontFamily, layer.fontWeight);
         GlobalFonts.register(fontBuffer, layer.fontFamily);
         registeredFonts.add(fontKey);
-        console.log(`[Worker] Dynamic Font Registered for Canvas: ${fontKey}`);
       } catch (fontErr) {
         console.error(`[Worker] Failed to dynamically register font ${layer.fontFamily} on Canvas:`, fontErr.message);
       }
@@ -264,24 +171,6 @@ async function generatePremiumPNG(template, user, event, certificate, themeColor
     ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
   }
 
-  if (template.qrCode && template.qrCode.enabled) {
-    const signature = certificate.cryptographicSignature || "";
-    if (signature) {
-      const fingerprintText = `SECURE DIGITAL SIGNATURE: 0X${signature.substring(0, 16).toUpperCase()}`;
-      const fingerSize = 5.5 * scale;
-      
-      ctx.font = `normal ${fingerSize}px "Fira Code", Courier, monospace`;
-      ctx.fillStyle = "#6B7280";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      
-      const fingerX = template.qrCode.x * scale;
-      const fingerY = (template.qrCode.y * scale) + (template.qrCode.size * scale / 2) + (5 * scale);
-      
-      ctx.fillText(fingerprintText, fingerX, fingerY);
-    }
-  }
-
   const pngBytes = canvas.toBuffer('image/png');
   const pngKey = `pngs/${certificate.verificationCode}.png`;
   const pngUrl = await storageService.uploadFile(pngBytes, pngKey, "image/png");
@@ -324,13 +213,6 @@ async function generatePremiumSVG(template, user, event, certificate, themeColor
   }
 
   let signatureElement = "";
-  const signature = certificate.cryptographicSignature || "";
-  if (template.qrCode && template.qrCode.enabled && signature) {
-    const fingerprintText = `SECURE DIGITAL SIGNATURE: 0X${signature.substring(0, 16).toUpperCase()}`;
-    const fingerX = template.qrCode.x;
-    const fingerY = template.qrCode.y + (template.qrCode.size / 2) + 12;
-    signatureElement = `<text x="${fingerX}" y="${fingerY}" font-family="'Fira Code', Courier, monospace" font-size="5.5" fill="#6B7280" text-anchor="middle">${fingerprintText}</text>`;
-  }
 
   let textLayersElements = "";
   for (const layer of template.textLayers) {
@@ -368,7 +250,6 @@ ${textLayersElements}
 
 // Convert hex to rgb object for pdf-lib (0-1 range)
 function hexToRgb(hex) {
-  // Remove # if present
   hex = hex.replace(/^#/, "");
   if (hex.length === 3) {
     hex = hex.split("").map((c) => c + c).join("");
@@ -406,12 +287,10 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
   };
 
   // 1. Load Background
-  // Determine absolute path to the background file.
   let bgPath = "";
   if (template.backgroundUrl.startsWith("/storage/templates/")) {
     bgPath = path.join(__dirname, "../../", template.backgroundUrl);
   } else {
-    // Fallback if the path is somehow weird
     bgPath = path.join(TEMPLATES_DIR, path.basename(template.backgroundUrl));
   }
   
@@ -441,26 +320,22 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
   // Register fontkit
   doc.registerFontkit(fontkit);
 
-  // We only draw on the first page
+  // Draw on the first page
   const page = doc.getPages()[0];
 
   // 2. Add Text Layers
-  // Cache embedded fonts so we don't load the same TTF multiple times
   const embeddedFonts = {};
 
   for (const layer of template.textLayers) {
     const text = layer.variable === "custom" ? layer.customText : variables[layer.variable];
     if (!text) continue;
 
-    // Load and embed font
     const fontKey = `${layer.fontFamily}-${layer.fontWeight}`;
     if (!embeddedFonts[fontKey]) {
       const fontBuffer = await getFontBuffer(layer.fontFamily, layer.fontWeight);
       embeddedFonts[fontKey] = await doc.embedFont(fontBuffer);
     }
     const pdfFont = embeddedFonts[fontKey];
-
-    // Measure text width for alignment
     const textWidth = pdfFont.widthOfTextAtSize(text, layer.fontSize);
     
     let drawX = layer.x;
@@ -470,12 +345,7 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
       drawX = layer.x - textWidth;
     }
 
-    // PDF coordinates originate from BOTTOM-LEFT, whereas frontend canvas originates from TOP-LEFT.
-    // We need to invert Y axis!
     const drawY = template.height - layer.y;
-    // We must adjust drawY slightly down by the font size, as y is baseline in pdf-lib, but center in canvas
-    // Wait, in canvas our label was centered at `transform: translate(-50%, -50%)`.
-    // So the baseline is approximately `drawY - (layer.fontSize / 3)`.
     const adjustedY = drawY - (layer.fontSize / 3);
 
     page.drawText(text, {
@@ -493,11 +363,9 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
     const workspaceSlug = workspace ? workspace.slug : "verify";
     const verificationUrl = `${FRONTEND_BASE_URL}/verify/${workspaceSlug}/${certificate.verificationCode}?ref=qr`;
 
-    // Generate stunning branded premium circular QR Code
     const qrBuffer = await generatePremiumQRCode(verificationUrl, template.qrCode.size, themeColor);
     const qrImage = await doc.embedPng(qrBuffer);
     
-    // Invert Y and adjust for center alignment
     const qrY = template.height - template.qrCode.y;
     const drawX = template.qrCode.x - (template.qrCode.size / 2);
     const drawY = qrY - (template.qrCode.size / 2);
@@ -510,46 +378,37 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
     });
   }
 
-  // 4. Cryptographic Asymmetric Signing & Metadata Embedding
-  const deterministicPayload = {
+  // 4. Institutional Cryptographic Signing via SigningProvider
+  const claims = {
     verificationCode: certificate.verificationCode,
     recipientName: user.name,
     recipientEmail: user.email,
     eventName: event.name,
-    issuedAt: certificate.createdAt ? certificate.createdAt.toISOString() : new Date().toISOString()
+    eventDate: event.date,
+    organizationId: event.organizationId,
+    issuedAt: certificate.createdAt || new Date(),
+    expiresAt: certificate.expiresAt || null,
   };
-  const signature = signCertificateData(deterministicPayload);
 
-  // Set signature on the certificate object so PNG/SVG helpers can access it
+  const signingProvider = getSigningProvider("institution");
+  const signingResult = await signingProvider.sign(claims);
+
+  const signature = signingResult.signature;
+  const signingKeyId = signingResult.signingKeyId;
+  const signatureAlgorithm = signingResult.algorithm;
+  const providerType = signingResult.signingProvider;
+  const signedAt = new Date(signingResult.signedAt);
+
+  // Set signature metadata on certificate object
   certificate.cryptographicSignature = signature;
+  certificate.signingKeyId = signingKeyId;
+  certificate.signatureAlgorithm = signatureAlgorithm;
+  certificate.signingProvider = providerType;
+  certificate.signedAt = signedAt;
 
-  // Embed metadata and signature inside PDF properties
-  doc.setSubject(JSON.stringify(deterministicPayload));
-  doc.setKeywords([signature]);
-
-  // Draw precise visual signature fingerprint under the QR code if enabled
-  if (template.qrCode && template.qrCode.enabled) {
-    try {
-      const firaBuffer = await getFontBuffer("Fira Code", "normal");
-      const firaFont = await doc.embedFont(firaBuffer);
-      const fingerprintText = `SECURE DIGITAL SIGNATURE: 0X${signature.substring(0, 16).toUpperCase()}`;
-      const fingerSize = 5;
-      const fingerWidth = firaFont.widthOfTextAtSize(fingerprintText, fingerSize);
-      
-      const qrY = template.height - template.qrCode.y;
-      const fingerY = qrY - (template.qrCode.size / 2) - 10;
-      
-      page.drawText(fingerprintText, {
-        x: template.qrCode.x - (fingerWidth / 2),
-        y: fingerY,
-        size: fingerSize,
-        font: firaFont,
-        color: hexToRgb("#6B7280"), // Subtle gray-500
-      });
-    } catch (fontErr) {
-      console.warn("[Worker] Failed to embed Fira Code visual fingerprint:", fontErr.message);
-    }
-  }
+  // Embed canonical claims and signature into PDF properties
+  doc.setSubject(signingResult.canonicalPayload);
+  doc.setKeywords([signature, signingKeyId]);
 
   const pdfBytes = await doc.save();
   const pdfKey = `pdfs/${certificate.verificationCode}.pdf`;
@@ -573,16 +432,20 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
   return { 
     pdfUrl, 
     signature,
+    signingKeyId,
+    signatureAlgorithm,
+    signingProvider: providerType,
+    signedAt,
     pngUrl,
     svgUrl
   };
 }
 
 /**
- * Process all pending certificates for a given event.
+ * Process all pending certificates for a given event and update batch progress.
  */
-async function queueCertificateGeneration(eventId) {
-  console.log(`[Worker] Starting certificate generation for event: ${eventId}`);
+async function queueCertificateGeneration(eventId, batchId = null) {
+  console.log(`[Worker] Starting certificate generation for event: ${eventId} (Batch: ${batchId || "auto"})`);
 
   const event = await Event.findById(eventId);
   if (!event) {
@@ -590,17 +453,31 @@ async function queueCertificateGeneration(eventId) {
     return { success: 0, failed: 0 };
   }
 
+  // Find or load batch
+  let batch = null;
+  if (batchId) {
+    batch = await IssuanceBatch.findById(batchId);
+  } else {
+    batch = await IssuanceBatch.findOne({
+      eventId: event._id,
+      status: { $in: ["queued", "processing"] },
+    }).sort({ createdAt: -1 });
+  }
+
+  if (batch) {
+    batch.status = "processing";
+    if (!batch.startedAt) batch.startedAt = new Date();
+    await batch.save();
+  }
+
   const org = await Organization.findById(event.organizationId);
   const zapierConfig = org?.integrations?.zapier;
   const slackConfig = org?.integrations?.slack;
 
   let template;
-  // Fallback logic for legacy string templateIds
   if (typeof event.templateId === "string" && !event.templateId.match(/^[0-9a-fA-F]{24}$/)) {
-    // If it's a legacy string (e.g. "modern"), fetch a starter template of that name
     template = await Template.findOne({ name: { $regex: new RegExp(event.templateId, "i") }, isStarter: true });
     if (!template) {
-       // If no starter, just grab the first one
        template = await Template.findOne();
     }
   } else {
@@ -609,6 +486,11 @@ async function queueCertificateGeneration(eventId) {
 
   if (!template) {
     console.error(`[Worker] Template ${event.templateId} not found.`);
+    if (batch) {
+      batch.status = "failed";
+      batch.errors.push({ error: `Template ${event.templateId} not found`, timestamp: new Date() });
+      await batch.save();
+    }
     return { success: 0, failed: 0 };
   }
 
@@ -621,15 +503,19 @@ async function queueCertificateGeneration(eventId) {
   });
   console.log(`[Worker] Found ${pendingCount} certificates to process`);
 
-  if (pendingCount === 0) return { success: 0, failed: 0 };
+  if (pendingCount === 0) {
+    if (batch && batch.status === "processing") {
+      batch.status = "completed";
+      batch.completedAt = new Date();
+      await batch.save();
+    }
+    return { success: 0, failed: 0 };
+  }
 
   let success = 0;
   let failed = 0;
   let bulkUpdates = [];
 
-  // Stream pending certificates with a cursor instead of loading them all into
-  // memory. PDFs are generated one at a time so a single slow op doesn't pin
-  // the entire batch in memory, and updates are flushed in batches of 200.
   const cursor = Certificate.find({
     eventId,
     $or: [
@@ -645,19 +531,23 @@ async function queueCertificateGeneration(eventId) {
       const user = cert.userId;
       if (!user) throw new Error("User missing");
 
-      // Generate the PDF and return signed signature
-      const { pdfUrl, signature, pngUrl, svgUrl } = await generatePDFWithPdfLib(template, user, event, cert);
+      // Generate the PDF, PNG, SVG with institutional signature
+      const genResult = await generatePDFWithPdfLib(template, user, event, cert);
 
       bulkUpdates.push({
         updateOne: {
           filter: { _id: cert._id },
           update: { 
             $set: { 
-              pdfUrl, 
+              pdfUrl: genResult.pdfUrl, 
               status: "generated",
-              cryptographicSignature: signature,
-              pngUrl,
-              svgUrl
+              cryptographicSignature: genResult.signature,
+              signingKeyId: genResult.signingKeyId,
+              signatureAlgorithm: genResult.signatureAlgorithm,
+              signingProvider: genResult.signingProvider,
+              signedAt: genResult.signedAt,
+              pngUrl: genResult.pngUrl,
+              svgUrl: genResult.svgUrl
             } 
           }
         }
@@ -666,7 +556,6 @@ async function queueCertificateGeneration(eventId) {
       // Zapier Webhook Trigger
       if (zapierConfig && zapierConfig.connected && zapierConfig.webhookUrl) {
         try {
-          // Native Node.js fetch (available in Node 18+)
           await fetch(zapierConfig.webhookUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -675,12 +564,13 @@ async function queueCertificateGeneration(eventId) {
               recipientName: user.name,
               recipientEmail: user.email,
               verificationCode: cert.verificationCode,
-              pdfUrl: `${FRONTEND_BASE_URL}${pdfUrl}`,
+              pdfUrl: `${FRONTEND_BASE_URL}${genResult.pdfUrl}`,
+              signingKeyId: genResult.signingKeyId,
               issuedAt: new Date().toISOString()
             })
           });
         } catch (webhookErr) {
-          console.error(`[Worker] Failed to trigger Zapier webhook for ${cert.verificationCode}`, webhookErr.message);
+          console.error(`[Worker] Failed to trigger Zapier webhook for ${cert.verificationCode}:`, webhookErr.message);
         }
       }
 
@@ -695,30 +585,15 @@ async function queueCertificateGeneration(eventId) {
             blocks: [
               {
                 type: "section",
-                text: {
-                  type: "mrkdwn",
-                  text: `🎓 *New Certificate Generated!*`
-                }
+                text: { type: "mrkdwn", text: `🎓 *New Certificate Digitally Signed & Generated!*` }
               },
               {
                 type: "section",
                 fields: [
-                  {
-                    type: "mrkdwn",
-                    text: `*Event:*\n${event.name}`
-                  },
-                  {
-                    type: "mrkdwn",
-                    text: `*Recipient:*\n${user.name} (${user.email})`
-                  },
-                  {
-                    type: "mrkdwn",
-                    text: `*Verification Code:*\n\`${cert.verificationCode}\``
-                  },
-                  {
-                    type: "mrkdwn",
-                    text: `*Issued At:*\n${new Date().toLocaleString()}`
-                  }
+                  { type: "mrkdwn", text: `*Event:*\n${event.name}` },
+                  { type: "mrkdwn", text: `*Recipient:*\n${user.name} (${user.email})` },
+                  { type: "mrkdwn", text: `*Verification Code:*\n\`${cert.verificationCode}\`` },
+                  { type: "mrkdwn", text: `*Signing Key ID:*\n\`${genResult.signingKeyId}\`` }
                 ]
               },
               {
@@ -726,11 +601,7 @@ async function queueCertificateGeneration(eventId) {
                 elements: [
                   {
                     type: "button",
-                    text: {
-                      type: "plain_text",
-                      text: "Verify Certificate",
-                      emoji: true
-                    },
+                    text: { type: "plain_text", text: "Verify Certificate", emoji: true },
                     url: verificationUrl,
                     action_id: "verify_cert_click"
                   }
@@ -745,16 +616,22 @@ async function queueCertificateGeneration(eventId) {
             body: JSON.stringify(payload)
           });
         } catch (webhookErr) {
-          console.error(`[Worker] Failed to trigger Slack webhook for ${cert.verificationCode}`, webhookErr.message);
+          console.error(`[Worker] Failed to trigger Slack webhook for ${cert.verificationCode}:`, webhookErr.message);
         }
       }
 
       success++;
+      if (batch) {
+        batch.completedCount += 1;
+        batch.pendingCount = Math.max(0, batch.pendingCount - 1);
+      }
+
       if (success % 50 === 0) {
         console.log(`[Worker] Generated ${success} certificates...`);
+        if (batch) await batch.save();
       }
     } catch (err) {
-      console.error(`[Worker] Failed: ${cert.verificationCode}`, err);
+      console.error(`[Worker] Failed: ${cert.verificationCode}:`, err);
       const currentAttempts = (cert.attemptsCount || 0) + 1;
       bulkUpdates.push({
         updateOne: {
@@ -769,16 +646,40 @@ async function queueCertificateGeneration(eventId) {
         }
       });
       failed++;
+
+      if (batch) {
+        batch.failedCount += 1;
+        batch.pendingCount = Math.max(0, batch.pendingCount - 1);
+        batch.errors.push({
+          certificateId: cert._id,
+          recipientEmail: cert.userId?.email || "",
+          error: err.message || String(err),
+          timestamp: new Date(),
+        });
+      }
     }
 
     if (bulkUpdates.length >= 200) {
       await Certificate.bulkWrite(bulkUpdates);
       bulkUpdates = [];
+      if (batch) await batch.save();
     }
   }
 
   if (bulkUpdates.length > 0) {
     await Certificate.bulkWrite(bulkUpdates);
+  }
+
+  if (batch) {
+    if (failed === 0) {
+      batch.status = "completed";
+    } else if (success > 0) {
+      batch.status = "partially_failed";
+    } else {
+      batch.status = "failed";
+    }
+    batch.completedAt = new Date();
+    await batch.save();
   }
 
   console.log(`[Worker] Done. Success: ${success}, Failed: ${failed}`);

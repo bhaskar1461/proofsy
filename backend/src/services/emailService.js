@@ -92,11 +92,11 @@ async function getTransporter(smtpSettings = null) {
 async function sendCertificateEmail({ recipientName, recipientEmail, eventName, eventDate, verificationCode, pdfUrl, verifyUrl, smtpSettings = null }) {
   const transport = await getTransporter(smtpSettings);
   let fromAddress = process.env.EMAIL_FROM || "noreply@proofsy.io";
-  let fromName = "Proofsy";
+  let fromName = process.env.EMAIL_FROM_NAME || "test";
 
   if (smtpSettings && smtpSettings.fromEmail) {
     fromAddress = smtpSettings.fromEmail;
-    fromName = smtpSettings.fromName || "Proofsy";
+    fromName = smtpSettings.fromName || process.env.EMAIL_FROM_NAME || "test";
   }
 
   const dateStr = eventDate

@@ -22,6 +22,15 @@ const UserSchema = new mongoose.Schema(
       type: Date,
       select: false,
     },
+    otpAttempts: {
+      type: Number,
+      default: 0,
+    },
+    otpLockedUntil: {
+      type: Date,
+      select: false,
+      default: null,
+    },
     bio: {
       type: String,
       maxlength: 500,

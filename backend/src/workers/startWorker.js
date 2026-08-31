@@ -21,7 +21,12 @@ async function start() {
   console.log("[Worker] ✓ Connected to Redis, waiting for jobs...");
   startExpiryChecker(REDIS_URL);
 
-  certQueue.process(async (job) => {
+  const os = require("os");
+  const defaultConcurrency = Math.max(2, os.cpus()?.length || 4);
+  const concurrency = parseInt(process.env.WORKER_CONCURRENCY, 10) || defaultConcurrency;
+  console.log(`[Worker] ✓ Worker pool started with concurrency: ${concurrency} parallel threads`);
+
+  certQueue.process(concurrency, async (job) => {
     const { eventId } = job.data;
     console.log(`[Worker] Processing certificate generation for event: ${eventId}`);
     const result = await queueCertificateGeneration(eventId);

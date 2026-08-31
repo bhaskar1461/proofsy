@@ -42,29 +42,72 @@ app.use(
     origin(origin, cb) {
       // Allow same-origin / non-browser requests (no Origin header).
       if (!origin) return cb(null, true);
-      // If no allowlist configured, allow all in non-production for local dev.
-      if (allowedOrigins.length === 0) {
-        if (process.env.NODE_ENV === "production") {
-          return cb(new Error("Origin not allowed by CORS"));
-        }
+      // If non-production, allow all origins for smooth local/dev/tunnel testing
+      if (process.env.NODE_ENV !== "production") {
         return cb(null, true);
       }
-      if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        return cb(null, true);
+      }
+      // Check for wildcard or subdomain matches (e.g. *.trycloudflare.com or *.wuaze.com)
+      const isAllowed = allowedOrigins.some((allowed) => {
+        if (allowed === "*") return true;
+        if (allowed.startsWith("*.")) {
+          const suffix = allowed.slice(2);
+          try {
+            const originHost = new URL(origin).hostname;
+            return originHost.endsWith(suffix);
+          } catch {
+            return origin.endsWith(suffix);
+          }
+        }
+        return false;
+      });
+      if (isAllowed) return cb(null, true);
       return cb(new Error("Origin not allowed by CORS"));
     },
     credentials: true,
   })
 );
 
-// Request limiting — configurable via env vars
+// Request limiting — configurable via env vars and backed by Redis for multi-replica scaling
 const RATE_LIMIT_WINDOW = parseInt(process.env.RATE_LIMIT_WINDOW_MS, 10) || 15 * 60 * 1000;
 const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX, 10) || (process.env.NODE_ENV === "production" ? 100 : 1000);
+
+let apiRedisStore = undefined;
+let authRedisStore = undefined;
+if (process.env.REDIS_URL && (process.env.NODE_ENV === "production" || process.env.USE_REDIS === "true")) {
+  try {
+    const { RedisStore } = require("rate-limit-redis");
+    const Redis = require("ioredis");
+    const redisClient = new Redis(process.env.REDIS_URL, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 2000,
+    });
+    redisClient.on("error", (err) => {
+      logger.warn("[RateLimit] Redis store unavailable, falling back to local memory store: " + err.message);
+    });
+    apiRedisStore = new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: "rl:api:",
+    });
+    authRedisStore = new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: "rl:auth:",
+    });
+    logger.info("✓ Rate limiting configured with distributed Redis store");
+  } catch (err) {
+    logger.warn("[RateLimit] Failed to initialize RedisStore:", err.message);
+  }
+}
+
 const limiter = rateLimit({
   windowMs: RATE_LIMIT_WINDOW,
   max: RATE_LIMIT_MAX,
   message: { error: "Too many requests from this IP, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  ...(apiRedisStore && { store: apiRedisStore }),
 });
 app.use("/api", limiter);
 
@@ -75,6 +118,7 @@ const authLimiter = rateLimit({
   message: { error: "Too many authentication attempts, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
+  ...(authRedisStore && { store: authRedisStore }),
 });
 
 // Correlation ID middleware — must be early to tag all downstream logs
@@ -126,6 +170,7 @@ app.use("/api/integrations", require("./routes/integrations"));
 app.use("/api/custom-fonts", require("./routes/customFonts"));
 app.use("/api/audit-logs", require("./routes/auditLogs"));
 app.use("/api/branding", require("./routes/branding"));
+app.use("/api/ai", require("./routes/ai"));
 app.use("/api/v1", require("./routes/v1"));
 
 // Health check endpoint — detailed system status

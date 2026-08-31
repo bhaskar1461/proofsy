@@ -34,6 +34,12 @@ backend/uploads/
 backend/tests/valid.csv
 backend/tests/empty.csv
 backend/logs/
+*.log
+
+# Ad-hoc deployment and credential scripts
+scripts/test_*.py
+scripts/test_*.js
+scripts/update_remote_*.py
 
 # Non-project files
 *.jpeg
@@ -43,6 +49,10 @@ design-system/
 ui-ux-skills/
 impeccable-src/
 .impeccable/
-run-logs/
-nginx/
-.codex
+# Build & Archive Artifacts
+*.tar.gz
+*.mp4
+*.pdf
+scratch/
+certs/
+.agents/

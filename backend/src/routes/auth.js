@@ -1,9 +1,12 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const Organization = require("../models/Organization");
 const TeamMember = require("../models/TeamMember");
-const { protect } = require("../middleware/auth");
+const User = require("../models/User");
+const { protect, protectRecipient } = require("../middleware/auth");
+const { sendRecipientOTPEmail } = require("../services/emailService");
 
 const generateToken = (id) => {
   if (!process.env.JWT_SECRET) {
@@ -67,7 +70,7 @@ router.post("/register", async (req, res, next) => {
       role: "owner",
     });
 
-    // Create Default Workspace (Indian College Demo Workspace)
+    // Create Default Workspace
     const Workspace = require("../models/Workspace");
     const Template = require("../models/Template");
     const Event = require("../models/Event");
@@ -147,7 +150,6 @@ router.post("/demo", async (req, res, next) => {
       role: "owner",
     });
 
-    // Create Default Workspace
     const Workspace = require("../models/Workspace");
     const Template = require("../models/Template");
     const Event = require("../models/Event");
@@ -158,13 +160,12 @@ router.post("/demo", async (req, res, next) => {
       organizationId: organization._id,
       slug: workspaceSlug,
       createdBy: member._id,
-      credits: 250, // Default testing credits
+      credits: 250,
     });
 
     member.workspaceId = workspace._id;
     await member.save();
 
-    // Auto-seed a sample template & event under this workspace
     const starterTemplate = await Template.findOne({ name: "Elegant Gold", isStarter: true }) || await Template.findOne({ isStarter: true });
     let seededTemplateId = null;
     if (starterTemplate) {
@@ -227,6 +228,84 @@ router.post("/login", async (req, res, next) => {
   }
 });
 
+// @desc    Request Password Reset Token
+// @route   POST /api/auth/forgot-password
+router.post("/forgot-password", async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: "Please provide an email address" });
+    }
+
+    const member = await TeamMember.findOne({ email: email.toLowerCase().trim() });
+    
+    // Generic response to prevent email enumeration
+    if (!member) {
+      return res.status(200).json({
+        success: true,
+        message: "If an account with that email exists, password reset instructions have been generated.",
+      });
+    }
+
+    // Generate 32-byte reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const hashedToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    member.resetPasswordToken = hashedToken;
+    member.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await member.save();
+
+    console.log(`[AUTH] Password reset token generated for ${member.email}`);
+
+    const isDev = process.env.NODE_ENV === "development";
+    return res.status(200).json({
+      success: true,
+      message: "If an account with that email exists, password reset instructions have been generated.",
+      ...(isDev && { debugResetToken: resetToken }),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// @desc    Reset Password with Token
+// @route   POST /api/auth/reset-password
+router.post("/reset-password", async (req, res, next) => {
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!token || !newPassword) {
+      return res.status(400).json({ success: false, error: "Please provide the reset token and new password" });
+    }
+
+    if (String(newPassword).length < 6) {
+      return res.status(400).json({ success: false, error: "Password must be at least 6 characters long" });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const member = await TeamMember.findOne({
+      resetPasswordToken: hashedToken,
+      resetPasswordExpires: { $gt: Date.now() },
+    }).select("+password");
+
+    if (!member) {
+      return res.status(400).json({ success: false, error: "Invalid or expired password reset token" });
+    }
+
+    member.password = newPassword;
+    member.resetPasswordToken = undefined;
+    member.resetPasswordExpires = undefined;
+    await member.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successful. You may now login with your new credentials.",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // @desc    Logout user / clear cookie
 // @route   POST /api/auth/logout
 router.post("/logout", (req, res) => {
@@ -251,11 +330,8 @@ router.get("/me", protect, async (req, res, next) => {
     next(error);
   }
 });
+
 // --- RECIPIENT AUTHENTICATION (OTP) ---
-const crypto = require("crypto");
-const User = require("../models/User");
-const { protectRecipient } = require("../middleware/auth");
-const { sendRecipientOTPEmail } = require("../services/emailService");
 
 // @desc    Register a new recipient User
 // @route   POST /api/auth/recipient/register
@@ -316,19 +392,29 @@ router.post("/recipient/login", async (req, res, next) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    const user = await User.findOne({ email: normalizedEmail });
+    const user = await User.findOne({ email: normalizedEmail }).select("+otpLockedUntil");
 
+    // Check if account is temporarily locked
+    if (user?.otpLockedUntil && user.otpLockedUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.otpLockedUntil - Date.now()) / 60000);
+      return res.status(429).json({
+        success: false,
+        error: `Too many failed attempts. Account temporarily locked. Please try again in ${remainingMinutes} minute(s).`,
+      });
+    }
+
+    // Prevent email enumeration: Return generic success even if user not found
     if (!user) {
-      // Return success even if user not found to prevent email enumeration,
-      // but in this context the frontend already tells them if they have certs,
-      // so we can be explicit or just return success.
-      return res.status(404).json({ success: false, error: "No certificates found for this email." });
+      return res.status(200).json({
+        success: true,
+        message: "If certificates exist for this email, a verification code has been sent.",
+      });
     }
 
     // Generate 6 digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
-    // Hash OTP for DB (basic security)
+    // Hash OTP for DB
     const salt = crypto.randomBytes(8).toString("hex");
     const hashedOtp = crypto.createHash("sha256").update(otp + salt).digest("hex");
     const storedCode = `${salt}:${hashedOtp}`;
@@ -337,22 +423,23 @@ router.post("/recipient/login", async (req, res, next) => {
     user.loginCodeExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
     await user.save();
 
-    console.log("\n==================================================");
-    console.log(`[AUTH] RECIPIENT LOGIN OTP FOR ${user.email} IS: ${otp}`);
-    console.log("==================================================\n");
+    if (process.env.NODE_ENV === "development") {
+      console.log("\n==================================================");
+      console.log(`[AUTH] RECIPIENT LOGIN OTP FOR ${user.email} IS: ${otp}`);
+      console.log("==================================================\n");
+    }
 
     try {
       await sendRecipientOTPEmail(user.email, user.name, otp);
     } catch (err) {
-      console.error("[Email] Failed to send OTP:", err);
-      console.log("[Email] Falling back to console-only OTP delivery to ensure system usability.");
+      console.error("[Email] Failed to send OTP:", err.message);
     }
 
-    const isProd = process.env.NODE_ENV === "production";
+    const isDev = process.env.NODE_ENV === "development";
     res.status(200).json({ 
       success: true, 
-      message: "OTP sent to email", 
-      ...(!isProd && { debugOtp: otp }) 
+      message: "If certificates exist for this email, a verification code has been sent.", 
+      ...(isDev && { debugOtp: otp }) 
     });
   } catch (error) {
     next(error);
@@ -368,9 +455,23 @@ router.post("/recipient/verify", async (req, res, next) => {
       return res.status(400).json({ success: false, error: "Please provide email and OTP" });
     }
 
-    const user = await User.findOne({ email: email.trim().toLowerCase() }).select("+loginCode +loginCodeExpires");
+    const user = await User.findOne({ email: email.trim().toLowerCase() })
+      .select("+loginCode +loginCodeExpires +otpAttempts +otpLockedUntil");
 
-    if (!user || !user.loginCode || !user.loginCodeExpires || user.loginCodeExpires < Date.now()) {
+    if (!user) {
+      return res.status(401).json({ success: false, error: "Invalid or expired OTP" });
+    }
+
+    // Check if account is locked out
+    if (user.otpLockedUntil && user.otpLockedUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.otpLockedUntil - Date.now()) / 60000);
+      return res.status(429).json({
+        success: false,
+        error: `Too many failed attempts. Account temporarily locked. Please try again in ${remainingMinutes} minute(s).`,
+      });
+    }
+
+    if (!user.loginCode || !user.loginCodeExpires || user.loginCodeExpires < Date.now()) {
       return res.status(401).json({ success: false, error: "Invalid or expired OTP" });
     }
 
@@ -378,12 +479,28 @@ router.post("/recipient/verify", async (req, res, next) => {
     const verifyHash = crypto.createHash("sha256").update(otp + salt).digest("hex");
 
     if (verifyHash !== hash) {
+      user.otpAttempts = (user.otpAttempts || 0) + 1;
+      if (user.otpAttempts >= 5) {
+        user.otpLockedUntil = new Date(Date.now() + 15 * 60 * 1000); // 15-minute lockout
+        user.loginCode = undefined;
+        user.loginCodeExpires = undefined;
+      }
+      await user.save();
+
+      if (user.otpAttempts >= 5) {
+        return res.status(429).json({
+          success: false,
+          error: "Too many failed attempts. Account temporarily locked for 15 minutes.",
+        });
+      }
       return res.status(401).json({ success: false, error: "Invalid OTP" });
     }
 
-    // Clear OTP
+    // Clear OTP & reset attempts on successful verify
     user.loginCode = undefined;
     user.loginCodeExpires = undefined;
+    user.otpAttempts = 0;
+    user.otpLockedUntil = null;
     await user.save();
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
@@ -460,6 +577,10 @@ router.get("/recipient/certificates", protectRecipient, async (req, res, next) =
           verificationCode: c.verificationCode,
           pdfUrl: c.pdfUrl,
           status: c.status,
+          signingKeyId: c.signingKeyId || null,
+          signingProvider: c.signingProvider || "institution",
+          signatureAlgorithm: c.signatureAlgorithm || "RSA-SHA256",
+          signedAt: c.signedAt ? c.signedAt.toISOString() : (c.createdAt ? c.createdAt.toISOString() : null),
           expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
           revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
           revocationReason: c.revocationReason || "",
@@ -565,6 +686,10 @@ router.get("/recipient/public/:email", async (req, res, next) => {
       verificationCode: c.verificationCode,
       pdfUrl: c.pdfUrl,
       status: c.status,
+      signingKeyId: c.signingKeyId || null,
+      signingProvider: c.signingProvider || "institution",
+      signatureAlgorithm: c.signatureAlgorithm || "RSA-SHA256",
+      signedAt: c.signedAt ? c.signedAt.toISOString() : (c.createdAt ? c.createdAt.toISOString() : null),
       expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
       revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
       revocationReason: c.revocationReason || "",

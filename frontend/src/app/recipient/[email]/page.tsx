@@ -12,7 +12,7 @@ function getApiBase() {
     return `${backendUrl.replace(/\/$/, "")}/api`;
   }
 
-  return "http://localhost:5000/api";
+  return "http://localhost:8001/api";
 }
 
 async function fetchPublicProfile(email: string) {

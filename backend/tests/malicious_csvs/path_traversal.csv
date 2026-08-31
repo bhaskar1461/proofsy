@@ -1,0 +1,5 @@
+name,email
+../../../etc/passwd,path1@evil.com
+..\..\..\windows\system32\config\sam,path2@evil.com
+%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd,path3@evil.com
+....//....//....//etc/passwd,path4@evil.com

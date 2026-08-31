@@ -7,17 +7,13 @@ import { pageVariants, staggerContainer, fadeUp, headerSlide, cardHover, pulseGl
 import { api } from "@/lib/api";
 
 const starterIntegrations = [
-  { name: "Zapier", desc: "Connect Proofsy with 5,000+ apps using automated workflows.", icon: "⚡", category: "Automation", status: "available" as const },
-  { name: "Webhooks", desc: "Send real-time event data to any URL endpoint.", icon: "🔗", category: "Developer", status: "available" as const },
   { name: "Google Sheets", desc: "Sync recipient data directly from Google Sheets.", icon: "📊", category: "Data", status: "available" as const },
+  { name: "Zapier", desc: "Connect Proofsy with 5,000+ apps using automated workflows.", icon: "⚡", category: "Automation", status: "available" as const },
   { name: "Slack", desc: "Get notifications when credentials are issued or verified.", icon: "💬", category: "Communication", status: "available" as const },
-  { name: "HubSpot", desc: "Sync credential data with your CRM contacts.", icon: "🎯", category: "CRM", status: "coming" as const },
-  { name: "REST API", desc: "Full API access for custom integrations and workflows.", icon: "🛠️", category: "Developer", status: "available" as const },
 ];
 
 export default function IntegrationsPage() {
-  const [integrations, setIntegrations] = useState<Record<string, { connected?: boolean, webhookUrl?: string, sheetUrl?: string, apiKey?: string }>>({});
-  const [watchlist, setWatchlist] = useState<Record<string, boolean>>({});
+  const [integrations, setIntegrations] = useState<Record<string, { connected?: boolean, webhookUrl?: string, sheetUrl?: string }>>({});
   const [loading, setLoading] = useState(true);
 
   // Zapier Modal State
@@ -30,12 +26,6 @@ export default function IntegrationsPage() {
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
   const [savingGoogleSheets, setSavingGoogleSheets] = useState(false);
 
-  // REST API Modal State
-  const [restApiModalOpen, setRestApiModalOpen] = useState(false);
-  const [restApiKey, setRestApiKey] = useState("");
-  const [savingRestApi, setSavingRestApi] = useState(false);
-  const [copied, setCopied] = useState(false);
-
   // Slack Modal State
   const [slackModalOpen, setSlackModalOpen] = useState(false);
   const [slackWebhookUrl, setSlackWebhookUrl] = useState("");
@@ -47,16 +37,13 @@ export default function IntegrationsPage() {
       try {
         const res = await api.getIntegrations();
         if (active && res.success && res.data) {
-          const data = res.data as Record<string, { connected?: boolean; webhookUrl?: string; sheetUrl?: string; apiKey?: string }>;
+          const data = res.data as Record<string, { connected?: boolean; webhookUrl?: string; sheetUrl?: string }>;
           setIntegrations(data);
           if (data.zapier?.webhookUrl) {
             setZapierWebhookUrl(data.zapier.webhookUrl);
           }
           if (data.googleSheets?.sheetUrl) {
             setGoogleSheetsUrl(data.googleSheets.sheetUrl);
-          }
-          if (data.restApi?.apiKey) {
-            setRestApiKey(data.restApi.apiKey);
           }
           if (data.slack?.webhookUrl) {
             setSlackWebhookUrl(data.slack.webhookUrl);
@@ -75,10 +62,7 @@ export default function IntegrationsPage() {
   const handleZapierSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingZapier(true);
-    
-    // If saving an empty URL, we disconnect. Otherwise we connect.
     const isConnecting = zapierWebhookUrl.trim().length > 0;
-    
     try {
       const res = await api.updateZapierIntegration(isConnecting, zapierWebhookUrl.trim());
       if (res.success && res.data) {
@@ -118,9 +102,7 @@ export default function IntegrationsPage() {
   const handleGoogleSheetsSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingGoogleSheets(true);
-    
     const isConnecting = googleSheetsUrl.trim().length > 0;
-    
     try {
       const res = await api.updateGoogleSheetsIntegration(isConnecting, googleSheetsUrl.trim());
       if (res.success && res.data) {
@@ -157,75 +139,10 @@ export default function IntegrationsPage() {
     }
   };
 
-  const handleRestApiConnect = async () => {
-    setSavingRestApi(true);
-    try {
-      const res = await api.updateRestApiIntegration(true);
-      if (res.success && res.data) {
-        const restApiData = res.data as { connected?: boolean; apiKey?: string };
-        setIntegrations((prev) => ({
-          ...prev,
-          restApi: restApiData
-        }));
-        if (restApiData.apiKey) {
-          setRestApiKey(restApiData.apiKey);
-        }
-        setRestApiModalOpen(true);
-      }
-    } catch (err) {
-      console.error("Failed to connect REST API", err);
-    } finally {
-      setSavingRestApi(false);
-    }
-  };
-
-  const handleRestApiRegenerate = async () => {
-    setSavingRestApi(true);
-    try {
-      const res = await api.updateRestApiIntegration(true, true);
-      if (res.success && res.data) {
-        const restApiData = res.data as { connected?: boolean; apiKey?: string };
-        setIntegrations((prev) => ({
-          ...prev,
-          restApi: restApiData
-        }));
-        if (restApiData.apiKey) {
-          setRestApiKey(restApiData.apiKey);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to regenerate REST API key", err);
-    } finally {
-      setSavingRestApi(false);
-    }
-  };
-
-  const handleRestApiDisconnect = async () => {
-    setSavingRestApi(true);
-    try {
-      const res = await api.updateRestApiIntegration(false);
-      if (res.success && res.data) {
-        const restApiData = res.data as { connected?: boolean; apiKey?: string };
-        setIntegrations((prev) => ({
-          ...prev,
-          restApi: restApiData
-        }));
-        setRestApiKey("");
-        setRestApiModalOpen(false);
-      }
-    } catch (err) {
-      console.error("Failed to disconnect REST API", err);
-    } finally {
-      setSavingRestApi(false);
-    }
-  };
-
   const handleSlackSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSavingSlack(true);
-    
     const isConnecting = slackWebhookUrl.trim().length > 0;
-    
     try {
       const res = await api.updateSlackIntegration(isConnecting, slackWebhookUrl.trim());
       if (res.success && res.data) {
@@ -277,13 +194,6 @@ export default function IntegrationsPage() {
       } else {
         setGoogleSheetsModalOpen(true);
       }
-    } else if (name === "REST API") {
-      const isConnected = integrations?.restApi?.connected;
-      if (isConnected) {
-        setRestApiModalOpen(true);
-      } else {
-        handleRestApiConnect();
-      }
     } else if (name === "Slack") {
       const isConnected = integrations?.slack?.connected;
       if (isConnected) {
@@ -291,14 +201,6 @@ export default function IntegrationsPage() {
       } else {
         setSlackModalOpen(true);
       }
-    } else {
-      // Mock other available integrations
-      const key = name === "Webhooks" ? "webhooks" : name.toLowerCase();
-      const isConnected = integrations?.[key]?.connected;
-      setIntegrations((prev) => ({
-        ...prev,
-        [key]: { connected: !isConnected }
-      }));
     }
   };
 
@@ -311,7 +213,7 @@ export default function IntegrationsPage() {
 
         <motion.header variants={headerSlide} initial="hidden" animate="visible" className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5">
           <h2 className="text-xl font-bold text-[var(--color-foreground)]">Integrations</h2>
-          <p className="text-sm text-[var(--color-muted)] mt-0.5">Connect Proofsy with your favorite tools and services.</p>
+          <p className="text-sm text-[var(--color-muted)] mt-0.5">Connect Proofsy with Google Sheets, Zapier, and Slack.</p>
         </motion.header>
 
         <motion.div variants={pageVariants} initial="hidden" animate="visible" className="px-8 py-8 relative z-[1]">
@@ -320,49 +222,40 @@ export default function IntegrationsPage() {
               <div className="animate-spin w-8 h-8 border-4 border-[var(--color-primary)] border-t-transparent rounded-full" />
             </div>
           ) : (
-            <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+            <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {starterIntegrations.map((integration) => {
-                const key = integration.name === "Google Sheets" ? "googleSheets" : (integration.name === "REST API" ? "restApi" : integration.name.toLowerCase());
+                const key = integration.name === "Google Sheets" ? "googleSheets" : integration.name.toLowerCase();
                 const isConnected = integrations?.[key]?.connected;
-                const isWatching = watchlist[integration.name];
-                const isSaving = (savingZapier && integration.name === "Zapier") || (savingGoogleSheets && integration.name === "Google Sheets") || (savingRestApi && integration.name === "REST API") || (savingSlack && integration.name === "Slack");
+                const isSaving = (savingZapier && integration.name === "Zapier") || (savingGoogleSheets && integration.name === "Google Sheets") || (savingSlack && integration.name === "Slack");
 
                 return (
                   <motion.div key={integration.name} variants={fadeUp} whileHover={cardHover} className="bg-white rounded-2xl border border-[var(--color-border)] p-6 hover:shadow-md hover:border-[var(--color-border-strong)] flex flex-col h-full">
                     <div className="flex items-start justify-between mb-4">
                       <div className="w-12 h-12 rounded-xl bg-[var(--color-surface-alt)] flex items-center justify-center text-2xl shrink-0">{integration.icon}</div>
-                      {integration.status === "coming" ? (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-600">Coming Soon</span>
-                      ) : isConnected ? (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-success-bg)] text-[var(--color-success)]">Connected</span>
+                      {isConnected ? (
+                        <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[var(--color-success-bg)] text-[var(--color-success)] flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                          Connected
+                        </span>
                       ) : (
-                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[var(--color-surface-alt)] text-[var(--color-muted)]">Available</span>
+                        <span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-[var(--color-surface-alt)] text-[var(--color-muted)]">Available</span>
                       )}
                     </div>
                     <h3 className="text-base font-bold text-[var(--color-foreground)] mb-1">{integration.name}</h3>
                     <p className="text-xs text-[var(--color-muted)] leading-relaxed mb-6 flex-1">{integration.desc}</p>
-                    <div className="flex items-center justify-between gap-3 mt-auto">
+                    <div className="flex items-center justify-between gap-3 mt-auto pt-4 border-t border-gray-50">
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface-alt)] text-[var(--color-muted)]">{integration.category}</span>
-                      {integration.status === "available" ? (
-                        <button
-                          onClick={() => handleGenericAction(integration.name)}
-                          disabled={isSaving}
-                          className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors cursor-pointer ${
-                            isConnected 
-                              ? "border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-surface-alt)]" 
-                              : "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]"
-                          } disabled:opacity-50`}
-                        >
-                          {isSaving ? "..." : (isConnected ? (integration.name === "REST API" ? "Manage" : "Disconnect") : "Connect")}
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => setWatchlist((current) => ({ ...current, [integration.name]: !current[integration.name] }))}
-                          className="text-xs font-semibold px-4 py-1.5 rounded-lg border border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-alt)] cursor-pointer"
-                        >
-                          {isWatching ? "Watching" : "Notify Me"}
-                        </button>
-                      )}
+                      <button
+                        onClick={() => handleGenericAction(integration.name)}
+                        disabled={isSaving}
+                        className={`text-xs font-semibold px-5 py-2 rounded-lg transition-colors cursor-pointer ${
+                          isConnected 
+                            ? "border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-red-50 hover:text-red-600 hover:border-red-200" 
+                            : "bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)]"
+                        } disabled:opacity-50`}
+                      >
+                        {isSaving ? "..." : (isConnected ? "Disconnect" : "Connect")}
+                      </button>
                     </div>
                   </motion.div>
                 );
@@ -371,76 +264,6 @@ export default function IntegrationsPage() {
           )}
         </motion.div>
       </main>
-
-      {/* Zapier Config Modal */}
-      <AnimatePresence>
-        {zapierModalOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setZapierModalOpen(false)}
-            />
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden"
-            >
-              <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-alt)] flex items-center justify-center text-lg">⚡</div>
-                  <h3 className="font-bold text-[var(--color-foreground)]">Connect Zapier</h3>
-                </div>
-                <button 
-                  onClick={() => setZapierModalOpen(false)}
-                  className="text-[var(--color-muted)] hover:text-[var(--color-foreground)] cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-              
-              <form onSubmit={handleZapierSave} className="p-6">
-                <p className="text-sm text-[var(--color-muted)] mb-5">
-                  To send new certificates to Zapier automatically, create a Zap with a <strong>Webhooks by Zapier (Catch Hook)</strong> trigger, and paste the generated URL here.
-                </p>
-                
-                <div className="space-y-1.5 mb-6">
-                  <label className="text-xs font-semibold text-[var(--color-foreground)]">Webhook URL</label>
-                  <input
-                    type="url"
-                    required
-                    value={zapierWebhookUrl}
-                    onChange={(e) => setZapierWebhookUrl(e.target.value)}
-                    placeholder="https://hooks.zapier.com/hooks/catch/..."
-                    className="w-full text-sm px-3 py-2.5 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-400"
-                  />
-                </div>
-                
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setZapierModalOpen(false)}
-                    className="px-4 py-2 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] cursor-pointer"
-                  >
-                    Cancel
-                  </button>
-                  <motion.button
-                    whileTap={cardTap}
-                    type="submit"
-                    disabled={savingZapier || !zapierWebhookUrl}
-                    className="px-5 py-2 text-sm font-semibold rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] disabled:opacity-50 cursor-pointer"
-                  >
-                    {savingZapier ? "Connecting..." : "Connect"}
-                  </motion.button>
-                </div>
-              </form>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Google Sheets Config Modal */}
       <AnimatePresence>
@@ -520,108 +343,71 @@ export default function IntegrationsPage() {
         )}
       </AnimatePresence>
 
-      {/* REST API Config Modal */}
+      {/* Zapier Config Modal */}
       <AnimatePresence>
-        {restApiModalOpen && (
+        {zapierModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div 
               initial={{ opacity: 0 }} 
               animate={{ opacity: 1 }} 
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-              onClick={() => setRestApiModalOpen(false)}
+              onClick={() => setZapierModalOpen(false)}
             />
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="relative w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden"
+              className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden"
             >
               <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-alt)] flex items-center justify-center text-lg">🛠️</div>
-                  <h3 className="font-bold text-[var(--color-foreground)]">Developer REST API</h3>
+                  <div className="w-8 h-8 rounded-lg bg-[var(--color-surface-alt)] flex items-center justify-center text-lg">⚡</div>
+                  <h3 className="font-bold text-[var(--color-foreground)]">Connect Zapier</h3>
                 </div>
                 <button 
-                  onClick={() => setRestApiModalOpen(false)}
+                  onClick={() => setZapierModalOpen(false)}
                   className="text-[var(--color-muted)] hover:text-[var(--color-foreground)] cursor-pointer"
                 >
                   ✕
                 </button>
               </div>
               
-              <div className="p-6 space-y-6">
-                <p className="text-sm text-[var(--color-muted)]">
-                  Use the Developer API to programmatically list events and issue credentials from external applications. Keep your API key secure.
+              <form onSubmit={handleZapierSave} className="p-6">
+                <p className="text-sm text-[var(--color-muted)] mb-5">
+                  To send new certificates to Zapier automatically, create a Zap with a <strong>Webhooks by Zapier (Catch Hook)</strong> trigger, and paste the generated URL here.
                 </p>
-
-                <div className="p-4 bg-gray-50 rounded-xl border border-gray-150 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-[var(--color-foreground)]">Developer API Key</span>
-                    {copied ? (
-                      <span className="text-[10px] text-green-600 font-semibold bg-green-50 px-2 py-0.5 rounded-full">Copied!</span>
-                    ) : null}
-                  </div>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      readOnly
-                      value={restApiKey}
-                      className="w-full text-sm font-mono bg-white px-3 py-2 rounded-lg border border-[var(--color-border)] select-all focus:outline-none"
-                    />
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(restApiKey);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
-                      className="px-3 py-2 text-xs font-semibold text-white bg-gray-900 hover:bg-gray-800 rounded-lg shrink-0 cursor-pointer"
-                    >
-                      Copy
-                    </button>
-                  </div>
+                
+                <div className="space-y-1.5 mb-6">
+                  <label className="text-xs font-semibold text-[var(--color-foreground)]">Webhook URL</label>
+                  <input
+                    type="url"
+                    required
+                    value={zapierWebhookUrl}
+                    onChange={(e) => setZapierWebhookUrl(e.target.value)}
+                    placeholder="https://hooks.zapier.com/hooks/catch/..."
+                    className="w-full text-sm px-3 py-2.5 rounded-lg border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] placeholder:text-gray-400"
+                  />
                 </div>
-
-                <div className="space-y-2">
-                  <span className="text-xs font-semibold text-[var(--color-foreground)]">Quick Reference (cURL)</span>
-                  <pre className="text-[11px] font-mono p-4 bg-slate-900 text-slate-100 rounded-xl overflow-x-auto whitespace-pre leading-relaxed select-all">
-{`curl -X POST "${typeof window !== 'undefined' ? window.location.origin : 'https://proofsy.co'}/api/v1/certificates" \\
-  -H "Authorization: Bearer ${restApiKey || 'YOUR_API_KEY'}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "eventId": "YOUR_EVENT_ID",
-    "name": "John Doe",
-    "email": "john@example.com"
-  }'`}
-                  </pre>
-                </div>
-
-                <div className="flex items-center justify-between border-t border-[var(--color-border)] pt-5">
+                
+                <div className="flex justify-end gap-3">
                   <button
-                    onClick={handleRestApiDisconnect}
-                    disabled={savingRestApi}
-                    className="px-4 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                    type="button"
+                    onClick={() => setZapierModalOpen(false)}
+                    className="px-4 py-2 text-sm font-medium text-[var(--color-muted)] hover:text-[var(--color-foreground)] cursor-pointer"
                   >
-                    Revoke Key (Disconnect)
+                    Cancel
                   </button>
-                  
-                  <div className="flex gap-3">
-                    <button
-                      onClick={handleRestApiRegenerate}
-                      disabled={savingRestApi}
-                      className="px-4 py-2 text-xs font-semibold border border-[var(--color-border)] text-[var(--color-foreground)] hover:bg-[var(--color-surface-alt)] rounded-lg transition-colors cursor-pointer"
-                    >
-                      Regenerate Key
-                    </button>
-                    <button
-                      onClick={() => setRestApiModalOpen(false)}
-                      className="px-4 py-2 text-xs font-semibold bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] rounded-lg transition-colors cursor-pointer"
-                    >
-                      Done
-                    </button>
-                  </div>
+                  <motion.button
+                    whileTap={cardTap}
+                    type="submit"
+                    disabled={savingZapier || !zapierWebhookUrl}
+                    className="px-5 py-2 text-sm font-semibold rounded-lg bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary-dark)] disabled:opacity-50 cursor-pointer"
+                  >
+                    {savingZapier ? "Connecting..." : "Connect"}
+                  </motion.button>
                 </div>
-              </div>
+              </form>
             </motion.div>
           </div>
         )}

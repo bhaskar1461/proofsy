@@ -27,6 +27,17 @@ const statusLabels: Record<CertificateStatus, string> = {
   suspended: "Suspended",
 };
 
+function decodeHtml(html?: string | null): string {
+  if (!html) return "";
+  return String(html)
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x2F;/g, "/");
+}
+
 function formatDate(value?: string | null) {
   if (!value) return "N/A";
   return new Date(value).toLocaleDateString("en-US", {
@@ -46,7 +57,7 @@ export default function BrandedVerificationCard({
   const primary = brandEnabled ? branding?.primaryColor || "#2563EB" : "#2563EB";
   const accent = brandEnabled ? branding?.accentColor || "#16A34A" : isValid ? "#16A34A" : "#DC2626";
   const title = brandEnabled && branding?.verificationPageTitle
-    ? branding.verificationPageTitle
+    ? decodeHtml(branding.verificationPageTitle)
     : isValid
       ? "Certificate Verified"
       : "Certificate Not Valid";
@@ -74,7 +85,7 @@ export default function BrandedVerificationCard({
             {title}
           </h2>
           <p className="text-[10px] text-[var(--color-muted)] truncate">
-            {brandEnabled ? branding?.workspaceName : "Proofsy"} verification result
+            {decodeHtml(brandEnabled ? branding?.workspaceName : "Proofsy")} verification result
           </p>
         </div>
         <span
@@ -90,22 +101,22 @@ export default function BrandedVerificationCard({
 
       {!isValid && reason && (
         <div className="mx-5 mt-4 rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-          {reason}
+          {decodeHtml(reason)}
         </div>
       )}
 
       <div className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Recipient</p>
-          <p className="text-xs font-semibold text-[var(--color-foreground)]">{certificate.recipientName}</p>
+          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certificate.recipientName)}</p>
         </div>
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Issued By</p>
-          <p className="text-xs font-semibold text-[var(--color-foreground)]">{certificate.organizerName || branding?.workspaceName || "Proofsy"}</p>
+          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certificate.organizerName || branding?.workspaceName || "Proofsy")}</p>
         </div>
         <div className="sm:col-span-2">
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Credential</p>
-          <p className="text-xs font-semibold text-[var(--color-foreground)]">{certificate.eventName}</p>
+          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certificate.eventName)}</p>
         </div>
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Issued</p>

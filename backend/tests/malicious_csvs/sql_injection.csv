@@ -1,0 +1,9 @@
+name,email
+'; DROP TABLE certificates; --,sqli@evil.com
+1' OR '1'='1,sqli2@evil.com
+' UNION SELECT * FROM users --,sqli3@evil.com
+1; EXEC xp_cmdshell('cmd.exe') --,sqli4@evil.com
+Robert'); DROP TABLE students;--,bobby@tables.com
+' OR 1=1 --,tautology@evil.com
+'; WAITFOR DELAY '0:0:10' --,timebased@evil.com
+' AND EXTRACTVALUE(1, CONCAT(0x7e, (SELECT version()))) --,xml@evil.com

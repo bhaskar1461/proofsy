@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Proofsy — Enterprise Documentation & Sales Dossier</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Marked.js for parsing Markdown -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- Google Fonts Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    code, pre {
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .prose table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+    }
+    .prose th, .prose td {
+      border: 1px solid #334155;
+      padding: 0.75rem 1rem;
+      text-align: left;
+    }
+    .prose th {
+      background-color: rgba(30, 41, 59, 0.8);
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    .prose td {
+      background-color: rgba(15, 23, 42, 0.4);
+      color: #cbd5e1;
+    }
+    .prose blockquote {
+      border-left: 4px solid #6366f1;
+      padding-left: 1rem;
+      font-style: italic;
+      color: #a5b4fc;
+      background-color: rgba(99, 102, 241, 0.05);
+      border-radius: 0 0.5rem 0.5rem 0;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+    }
+    .prose h1 { font-size: 2rem; font-weight: 800; color: #ffffff; margin-bottom: 1.5rem; }
+    .prose h2 { font-size: 1.5rem; font-weight: 700; color: #f1f5f9; margin-top: 2rem; margin-bottom: 1rem; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+    .prose h3 { font-size: 1.25rem; font-weight: 600; color: #e2e8f0; margin-top: 1.5rem; margin-bottom: 0.75rem; }
+    .prose p { margin-bottom: 1rem; line-height: 1.7; color: #cbd5e1; }
+    .prose ul, .prose ol { margin-left: 1.5rem; margin-bottom: 1rem; color: #cbd5e1; list-style-type: disc; }
+    .prose li { margin-bottom: 0.4rem; }
+    .prose hr { border-color: #334155; margin: 2rem 0; }
+    .prose strong { color: #ffffff; }
+    @media print {
+      body { background: white !important; color: black !important; }
+      .no-print { display: none !important; }
+      .prose th { background-color: #f1f5f9 !important; color: black !important; }
+      .prose td { background-color: white !important; color: black !important; border: 1px solid #ccc !important; }
+      .prose h1, .prose h2, .prose h3, .prose p, .prose strong { color: black !important; }
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col">
+
+  <!-- Header -->
+  <header class="no-print border-b border-slate-800 bg-slate-900/80 backdrop-blur-md px-6 py-4 sticky top-0 z-50 flex items-center justify-between">
+    <div class="flex items-center gap-3">
+      <div class="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-600/30">
+        P
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white tracking-wide">Proofsy Enterprise Dossier</h1>
+        <p class="text-xs text-slate-400">Rendered Document Viewer & PDF Export Portal</p>
+      </div>
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button onclick="window.print()" class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all shadow-md cursor-pointer">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+        <span>Print / Save as PDF</span>
+      </button>
+      <a href="https://proofsy.tech" target="_blank" class="border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold px-4 py-2 rounded-xl transition-all">
+        Live Web App ↗
+      </a>
+    </div>
+  </header>
+
+  <div class="flex-1 flex max-w-7xl w-full mx-auto p-6 gap-8">
+    <!-- Sidebar Navigation -->
+    <aside class="no-print w-72 shrink-0 space-y-2">
+      <span class="text-[11px] font-bold text-slate-500 uppercase tracking-wider px-3 block mb-2">Available Papers</span>
+      
+      <button onclick="loadDoc(0)" id="tab-0" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between bg-indigo-600/20 text-indigo-300 border border-indigo-500/30">
+        <span>01. Pitch Deck & Script</span>
+        <span class="text-[10px] bg-indigo-500/20 px-2 py-0.5 rounded">Slides</span>
+      </button>
+
+      <button onclick="loadDoc(1)" id="tab-1" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent">
+        <span>02. Product One-Pager</span>
+        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Summary</span>
+      </button>
+
+      <button onclick="loadDoc(2)" id="tab-2" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent">
+        <span>03. Cryptographic Whitepaper</span>
+        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Security</span>
+      </button>
+
+      <button onclick="loadDoc(3)" id="tab-3" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent">
+        <span>04. Master Services (MSA) & SLA</span>
+        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Contract</span>
+      </button>
+
+      <button onclick="loadDoc(4)" id="tab-4" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent">
+        <span>05. DPA (FERPA & GDPR)</span>
+        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Privacy</span>
+      </button>
+
+      <button onclick="loadDoc(5)" id="tab-5" class="tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent">
+        <span>06. Pricing & Order Form</span>
+        <span class="text-[10px] bg-slate-800 px-2 py-0.5 rounded text-slate-400">Commercial</span>
+      </button>
+    </aside>
+
+    <!-- Main Rendered Content -->
+    <main class="flex-1 bg-slate-900/60 border border-slate-800 rounded-2xl p-8 lg:p-12 shadow-2xl backdrop-blur-sm overflow-hidden">
+      <div id="content" class="prose max-w-none">
+        <div class="text-center py-12 text-slate-500">Loading document...</div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const docs = [
+      "01_Enterprise_Pitch_Deck_and_Script.md",
+      "02_Product_One_Pager_Executive_Summary.md",
+      "03_Cryptographic_and_Security_Whitepaper.md",
+      "04_Master_Services_Agreement_and_SLA.md",
+      "05_Data_Protection_Addendum_and_FERPA_GDPR.md",
+      "06_Enterprise_Pricing_and_Proposal_Template.md"
+    ];
+
+    async function loadDoc(index) {
+      // Update Tab Styles
+      document.querySelectorAll(".tab-btn").forEach((btn, i) => {
+        if (i === index) {
+          btn.className = "tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between bg-indigo-600/20 text-indigo-300 border border-indigo-500/30";
+        } else {
+          btn.className = "tab-btn w-full text-left px-4 py-3 rounded-xl text-xs font-semibold transition-all flex items-center justify-between text-slate-400 hover:bg-slate-900 border border-transparent";
+        }
+      });
+
+      const contentEl = document.getElementById("content");
+      contentEl.innerHTML = '<div class="text-center py-12 text-slate-500">Rendering document...</div>';
+
+      try {
+        const res = await fetch(docs[index]);
+        if (!res.ok) throw new Error("Failed to fetch markdown file");
+        const mdText = await res.text();
+        contentEl.innerHTML = marked.parse(mdText);
+      } catch (e) {
+        contentEl.innerHTML = `<div class="p-6 bg-red-950/50 border border-red-800 rounded-xl text-red-300 text-xs">Error loading file: ${e.message}</div>`;
+      }
+    }
+
+    // Load first doc initially
+    loadDoc(0);
+  </script>
+</body>
+</html>

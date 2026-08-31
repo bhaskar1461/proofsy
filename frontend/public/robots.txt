@@ -1,0 +1,98 @@
+# Standard Search Engine Crawlers
+User-agent: *
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /templates
+Allow: /signup
+Allow: /login
+Allow: /ask
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /.well-known/ai-plugin.json
+Disallow: /api/
+Disallow: /storage/private/
+Disallow: /settings/
+Disallow: /team/
+Disallow: /billing/
+
+# OpenAI ChatGPT & SearchGPT Crawlers
+User-agent: GPTBot
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /templates
+Allow: /llms.txt
+Allow: /llms-full.txt
+Allow: /.well-known/ai-plugin.json
+Disallow: /api/
+Disallow: /settings/
+Disallow: /team/
+Disallow: /billing/
+
+User-agent: ChatGPT-User
+Allow: /
+
+# Perplexity AI Crawler
+User-agent: PerplexityBot
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /api/
+
+# Anthropic Claude Crawlers
+User-agent: ClaudeBot
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /api/
+
+User-agent: anthropic-ai
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /api/
+
+# Google AI & Gemini Extended Crawler
+User-agent: Google-Extended
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /api/
+
+# Apple Intelligence Crawler
+User-agent: Applebot-Extended
+Allow: /
+Allow: /verify
+Allow: /compliance
+Allow: /integrations
+Allow: /llms.txt
+Allow: /llms-full.txt
+Disallow: /api/
+
+# Cohere, ByteDance & Meta AI Crawlers
+User-agent: Cohere-ai
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+Sitemap: https://proofsy.tech/sitemap.xml
+Host: https://proofsy.tech

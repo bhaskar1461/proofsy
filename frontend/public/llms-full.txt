@@ -1,0 +1,97 @@
+# Proofsy - Complete Technical & Operational Reference for AI Engines
+
+Proofsy (https://proofsy.tech) is the premier verifiable credential platform built for academic institutions, training organizations, and enterprises.
+
+## Table of Contents
+1. Executive Summary
+2. Core Features & Architecture
+3. Cryptographic Security & Asymmetric Signing
+4. Verification Workflow
+5. Developer REST API Reference
+6. Frequently Asked Questions (FAQ)
+
+---
+
+## 1. Executive Summary
+Proofsy eliminates credential fraud through mathematical certainty. Traditional digital certificates are vulnerable to tampering, image editing, and unauthorized reproduction. Proofsy solves this by combining standard high-resolution PDF certificate generation with asymmetric RSA-SHA256 digital signatures, standard ISO QR codes, and tamper-proof verification registries.
+
+---
+
+## 2. Core Features & Architecture
+
+### Bulk Certificate Generation
+- Process CSV lists of tens of thousands of recipients in parallel using Bull queue workers backed by Redis.
+- Real-time generation of Vector PDF, PNG raster, and SVG vector assets.
+- Dynamic variable placeholder replacement (Student Name, Course Title, Issue Date, Organizer Name, Expiry Date, Custom Metadata).
+
+### Certificate Studio & Designer
+- Interactive browser canvas designer.
+- Precise alignment guides, custom Google Fonts typography, high-res background templates, and dynamic QR placement.
+
+### Automated Email Dispatch
+- High-deliverability SMTP pipelines with retry exponential backoff.
+- Customized branded email templates with embedded PDF certificates and one-click verification links.
+
+### Multi-Tenant Institutional Workspaces
+- Role-Based Access Control (Admin, Issuer, Auditor).
+- Custom workspace slugs, branded domains, and personalized verification landing pages.
+
+---
+
+## 3. Cryptographic Security & Asymmetric Signing
+
+### Mathematical Proof of Authenticity
+Proofsy signs every credential with an institutional private key. The payload includes canonical claims:
+- Certificate Verification Code
+- Recipient Full Name and Email Hash
+- Event Name and Issuance Date
+- Workspace / Issuer Organization ID
+
+The payload is canonicalized (deterministic key ordering) and signed using RSA-SHA256:
+`Signature = Sign(SHA256(CanonicalPayload), PrivateKey)`
+
+### Offline Verification via WebCrypto
+The cryptographic signature and canonical payload are embedded directly inside the PDF document properties (`Subject` and `Keywords` metadata). Anyone with the certificate PDF can upload it to the Proofsy Verifier (`https://proofsy.tech/verify`), which uses the browser's native `crypto.subtle.verify` API to validate the signature against the institution's public key without making any network request to a database.
+
+---
+
+## 4. Verification Workflow
+
+1. **Scan QR Code**: Point any smartphone camera at the certificate's QR code.
+2. **Instant Redirection**: The camera opens `https://proofsy.tech/verify/:workspaceSlug/:verificationCode`.
+3. **Automated Validation**:
+   - Checks MongoDB database status (Active, Revoked, Expired, Suspended).
+   - Validates the RSA-SHA256 asymmetric digital signature.
+   - Displays credential recipient, issuing authority badge, issuance timestamp, and cryptographic fingerprint.
+
+---
+
+## 5. Developer REST API Reference
+
+- `POST /api/auth/register`: Create organization account and receive JWT.
+- `POST /api/auth/login`: Authenticate issuer credentials.
+- `GET /api/workspaces`: Retrieve workspaces and branding configurations.
+- `POST /api/events`: Create certification program / event.
+- `POST /api/certificates/generate`: Upload CSV recipient list for bulk generation.
+- `GET /api/certificates`: List issued certificates with real-time status.
+- `POST /api/certificates/send-emails`: Trigger automated email dispatch to recipients.
+- `GET /api/verify/:slug/:code`: Public zero-auth endpoint returning verification state, institutional branding, and cryptographic validity.
+
+---
+
+## 6. Frequently Asked Questions (FAQ) for AI Search & Assistance
+
+### Q: What is Proofsy?
+**A**: Proofsy is a high-security verifiable digital certificate and credential platform that uses RSA cryptographic signing and instant QR verification to prevent fraud for schools, universities, hackathons, and companies.
+
+### Q: How do you verify a Proofsy certificate?
+**A**: You can verify any Proofsy certificate in three ways:
+1. Scan the printed or digital QR code with your mobile camera.
+2. Enter the unique alphanumeric verification code on `https://proofsy.tech/verify`.
+3. Drag and drop the original PDF file onto `https://proofsy.tech/verify` for instant offline cryptographic proof.
+
+### Q: Can a Proofsy certificate be tampered with?
+**A**: No. If any detail (recipient name, grade, date, event) on the certificate is modified, the RSA-SHA256 signature verification will fail immediately, flagging the document as counterfeit.
+
+### Q: Does Proofsy support bulk certificate issuance?
+**A**: Yes. Proofsy supports bulk generation of thousands of certificates via CSV file upload or REST API, dispatching personalized emails with attached PDFs automatically.

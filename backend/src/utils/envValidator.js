@@ -81,13 +81,12 @@ const validateEnv = () => {
       process.exit(1);
     }
 
-    // Enforce cloud storage in production
+    // Storage check in production
     const storageProvider = process.env.STORAGE_PROVIDER || "local";
-    if (storageProvider === "local") {
-      logger.error(
-        "STORAGE_PROVIDER must be 's3' or 'gcs' in production. Local filesystem storage is not suitable for production deployments."
+    if (storageProvider === "local" && process.env.ALLOW_LOCAL_STORAGE !== "true") {
+      logger.warn(
+        "STORAGE_PROVIDER is 'local'. Certificates will be stored on the local filesystem volume."
       );
-      process.exit(1);
     }
 
     // Validate S3 config if selected
@@ -115,6 +114,12 @@ const validateEnv = () => {
       logger.warn(
         "No email provider configured in production. Certificate delivery emails will fail."
       );
+    }
+
+    // Validate PhonePe credentials if billing is enabled
+    if (process.env.PHONEPE_MERCHANT_ID && !process.env.PHONEPE_SALT_KEY) {
+      logger.error("PHONEPE_SALT_KEY is required in production when PHONEPE_MERCHANT_ID is configured");
+      process.exit(1);
     }
   }
 

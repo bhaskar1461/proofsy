@@ -5,7 +5,7 @@ const { protect } = require("../middleware/auth");
 const { tenantProtect } = require("../middleware/tenantProtect");
 
 router.post("/pay", protect, tenantProtect, billingController.initiatePayment);
-router.get("/status/:txnId", protect, billingController.getTransactionStatus);
+router.get("/status/:txnId", protect, tenantProtect, billingController.getTransactionStatus);
 router.post("/callback", billingController.paymentCallback);
 
 module.exports = router;

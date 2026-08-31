@@ -1,12 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "";
+export const BACKEND_URL = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_BACKEND_URL || "");
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api";
+
+export function getAssetUrl(path?: string | null): string {
+  if (!path) return "";
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) return path;
+  return path.startsWith("/") ? path : `/${path}`;
+}
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
   message?: string;
+  token?: string;
+  debugOtp?: string;
 }
 
 // Timeout wrapper for fetch
@@ -254,6 +262,7 @@ export interface AuditLogData {
   description: string;
   ipAddress: string;
   userAgent: string;
+  metadata?: Record<string, any> | null;
   createdAt: string;
 }
 
@@ -291,6 +300,22 @@ export const api = {
 
   listCertificates: () =>
     request<CertificateData[]>("/certificates"),
+
+  getBatchStatus: (batchId: string) =>
+    request<{
+      id: string;
+      eventId: string;
+      status: string;
+      totalCount: number;
+      pendingCount: number;
+      processingCount: number;
+      completedCount: number;
+      failedCount: number;
+      errors: string[];
+      startedAt: string | null;
+      completedAt: string | null;
+      createdAt: string;
+    }>(`/certificates/batch/${encodeURIComponent(batchId)}`),
 
   getCertificate: (id: string) =>
     request<CertificateDetailData>(`/certificates/${encodeURIComponent(id)}`),
@@ -531,6 +556,14 @@ export const api = {
       data: AuditLogData[];
     }>(`/audit-logs${query}`);
   },
+};
+
+export const aiApi = {
+  chat: (messages: Array<{ role: string; content: string }>) =>
+    request<{ content: string; toolExecutions?: any[] }>("/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
 };
 
 // Template types

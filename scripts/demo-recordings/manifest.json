@@ -1,0 +1,51 @@
+[
+  {
+    "scene": 2,
+    "name": "Landing + Dashboard",
+    "filename": "scene-02-landing-dashboard.webm",
+    "durationMs": 22185,
+    "status": "recorded"
+  },
+  {
+    "scene": 3,
+    "name": "Single Issuance",
+    "filename": "scene-03-single-issuance.webm",
+    "durationMs": 35143,
+    "status": "recorded"
+  },
+  {
+    "scene": 4,
+    "name": "Batch CSV Issuance",
+    "filename": "scene-04-batch-issuance.webm",
+    "durationMs": 40052,
+    "status": "recorded"
+  },
+  {
+    "scene": 5,
+    "name": "Verification",
+    "filename": "scene-05-verification.webm",
+    "durationMs": 45472,
+    "status": "recorded"
+  },
+  {
+    "scene": 6,
+    "name": "Multi-Tenant Isolation",
+    "filename": "scene-06-multi-tenant.webm",
+    "durationMs": 22007,
+    "status": "recorded"
+  },
+  {
+    "scene": 7,
+    "name": "Dashboard & Revocation",
+    "filename": "scene-07-dashboard-management.webm",
+    "durationMs": 44841,
+    "status": "recorded"
+  },
+  {
+    "scene": 9,
+    "name": "Close / CTA",
+    "filename": "scene-09-close.webm",
+    "durationMs": 10584,
+    "status": "recorded"
+  }
+]

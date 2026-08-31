@@ -21,6 +21,7 @@ const TransactionSchema = new mongoose.Schema(
     amount: {
       type: Number,
       required: true,
+      min: [0, "Amount cannot be negative"],
     },
     plan: {
       type: String,
@@ -29,6 +30,7 @@ const TransactionSchema = new mongoose.Schema(
     creditsAdded: {
       type: Number,
       required: true,
+      min: [0, "Credits added cannot be negative"],
     },
     status: {
       type: String,

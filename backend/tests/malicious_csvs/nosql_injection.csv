@@ -1,0 +1,8 @@
+name,email
+{"$ne": null},nosql1@evil.com
+{"$gt": ""},nosql2@evil.com
+{"$regex": ".*"},nosql3@evil.com
+{"$where": "this.password.length > 0"},nosql4@evil.com
+{"$or": [{"admin": true}]},nosql5@evil.com
+{"__proto__": {"admin": true}},proto@evil.com
+{"constructor": {"prototype": {"isAdmin": true}}},construct@evil.com

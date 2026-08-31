@@ -222,35 +222,37 @@ export default function RecipientsPage() {
             {loading ? (
               <div className="px-6 py-16 text-center text-sm text-[var(--color-muted)]">Loading recipients...</div>
             ) : (
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="bg-[var(--color-surface-alt)]">
-                    <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Recipient</th>
-                    <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Email</th>
-                    <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)] text-center">Events</th>
-                    <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Last Issued</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[var(--color-border)]">
-                  {filtered.map((recipient, i) => (
-                    <motion.tr key={recipient.id} variants={tableRow} initial="hidden" animate="visible" transition={{ delay: i * 0.03 }} className="hover:bg-[var(--color-surface-alt)]">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-[var(--color-primary-faint)] flex items-center justify-center text-[var(--color-primary)] text-xs font-bold">
-                            {recipient.name.charAt(0)}
+              <div className="responsive-table-wrapper">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-[var(--color-surface-alt)]">
+                      <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Recipient</th>
+                      <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Email</th>
+                      <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)] text-center">Events</th>
+                      <th className="px-6 py-3 text-[11px] font-semibold uppercase tracking-wider text-[var(--color-muted)]">Last Issued</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--color-border)]">
+                    {filtered.map((recipient, i) => (
+                      <motion.tr key={recipient.id} variants={tableRow} initial="hidden" animate="visible" transition={{ delay: i * 0.03 }} className="hover:bg-[var(--color-surface-alt)]">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-[var(--color-primary-faint)] flex items-center justify-center text-[var(--color-primary)] text-xs font-bold">
+                              {recipient.name.charAt(0)}
+                            </div>
+                            <span className="text-sm font-medium text-[var(--color-foreground)]">{recipient.name}</span>
                           </div>
-                          <span className="text-sm font-medium text-[var(--color-foreground)]">{recipient.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-muted)]">{recipient.email}</td>
-                      <td className="px-6 py-4 text-center">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[var(--color-surface-alt)] text-xs font-semibold text-[var(--color-foreground)]">{recipient.events}</span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-[var(--color-muted)]">{recipient.lastIssued}</td>
-                    </motion.tr>
-                  ))}
-                </tbody>
-              </table>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[var(--color-muted)]">{recipient.email}</td>
+                        <td className="px-6 py-4 text-center">
+                          <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-[var(--color-surface-alt)] text-xs font-semibold text-[var(--color-foreground)]">{recipient.events}</span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-[var(--color-muted)]">{recipient.lastIssued}</td>
+                      </motion.tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </motion.div>

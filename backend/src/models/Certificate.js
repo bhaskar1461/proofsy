@@ -24,6 +24,12 @@ const CertificateSchema = new mongoose.Schema(
       required: true,
       index: true,
     },
+    batchId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "IssuanceBatch",
+      default: null,
+      index: true,
+    },
     verificationCode: {
       type: String,
       required: true,
@@ -85,9 +91,27 @@ const CertificateSchema = new mongoose.Schema(
       type: String,
       unique: true,
       sparse: true,
+      index: true,
     },
     cryptographicSignature: {
       type: String,
+      default: null,
+    },
+    signingProvider: {
+      type: String,
+      default: "institution",
+    },
+    signingKeyId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+    signatureAlgorithm: {
+      type: String,
+      default: "RSA-SHA256",
+    },
+    signedAt: {
+      type: Date,
       default: null,
     },
   },
@@ -105,5 +129,6 @@ CertificateSchema.index({ workspaceId: 1, createdAt: -1 });
 CertificateSchema.index({ workspaceId: 1, status: 1 });
 CertificateSchema.index({ eventId: 1, status: 1 });
 CertificateSchema.index({ expiresAt: 1, status: 1 });
+CertificateSchema.index({ signingKeyId: 1, status: 1 });
 
 module.exports = mongoose.model("Certificate", CertificateSchema);

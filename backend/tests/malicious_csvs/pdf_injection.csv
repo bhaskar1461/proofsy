@@ -1,0 +1,5 @@
+name,email
+%) /Type /Annot /Subtype /Link /A << /URI (https://evil.com) >> (,pdf1@evil.com
+%) /JS (app.alert('XSS')) (,pdf2@evil.com
+BT /F1 24 Tf 100 700 Td (HACKED) Tj ET,pdf3@evil.com
+/JavaScript << /JS (app.launchURL('https://evil.com', true)) >>,pdf4@evil.com

@@ -9,6 +9,8 @@ import { api, BACKEND_URL, BrandingData, CertificateStatus } from "@/lib/api";
 import { fadeUp, float, pulseGlow } from "@/lib/animations";
 import { trackOnboarding } from "@/lib/onboarding";
 import BrandedVerificationCard from "@/components/BrandedVerificationCard";
+import AdBanner from "@/components/AdBanner";
+import SocialShareBar from "@/components/SocialShareBar";
 
 // Helper: Convert PEM string to ArrayBuffer for browser Web Crypto
 function pemToArrayBuffer(pem: string): ArrayBuffer {
@@ -33,6 +35,17 @@ function serializePayload(data: any): string {
     sorted[key] = data[key];
   });
   return JSON.stringify(sorted);
+}
+
+function decodeHtml(html?: string | null): string {
+  if (!html) return "";
+  return String(html)
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x2F;/g, "/");
 }
 
 export default function VerificationPage({ initialCode = "" }: { initialCode?: string }) {
@@ -247,7 +260,7 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
           isCryptographicallyVerified: true,
         });
         setFileStatus("valid");
-        trackOnboarding("verifiedCertificateOffline");
+        trackOnboarding("verifiedCertificate");
       } else {
         setFileStatus("invalid");
         setFileError("CRITICAL WARNING: The asymmetric digital signature does not match the payload. This file has been tampered with or modified offline!");
@@ -463,7 +476,7 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                         <div className="grid grid-cols-2 gap-4">
                           <div>
                             <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Recipient</p>
-                            <p className="text-xs font-semibold text-[var(--color-foreground)]">{certData.recipientName}</p>
+                            <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.recipientName)}</p>
                           </div>
                           <div>
                             <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Date Issued</p>
@@ -472,7 +485,7 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                         </div>
                         <div>
                           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Event Name</p>
-                          <p className="text-xs font-semibold text-[var(--color-foreground)]">{certData.eventName}</p>
+                          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.eventName)}</p>
                         </div>
 
                         {certData.isCryptographicallyVerified && (
@@ -603,6 +616,14 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                             )}
                           </div>
                         </div>
+                        <SocialShareBar
+                          certificateName={certData.eventName}
+                          organizationName={branding?.workspaceName || certData.organizerName || "Proofsy Technologies"}
+                          certificateCode={code}
+                          issueDate={certData.issuedAt}
+                          className="border-t border-dashed border-[var(--color-border)] pt-4"
+                        />
+                        <AdBanner type="inline" className="mt-4" />
                       </div>
                     </motion.div>
                   )}
@@ -732,7 +753,7 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Recipient</p>
-                          <p className="text-xs font-semibold text-[var(--color-foreground)]">{certData.recipientName}</p>
+                          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.recipientName)}</p>
                         </div>
                         <div>
                           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Date Issued</p>
@@ -741,7 +762,7 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                       </div>
                       <div>
                         <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Event Name</p>
-                        <p className="text-xs font-semibold text-[var(--color-foreground)]">{certData.eventName}</p>
+                        <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.eventName)}</p>
                       </div>
 
                       <div className="border-t border-dashed border-[var(--color-border)] pt-4">
@@ -770,6 +791,17 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                           </div>
                         </div>
                       </div>
+
+                      {/* 1-Click LinkedIn and Social Sharing */}
+                      <SocialShareBar
+                        certificateName={certData.eventName}
+                        organizationName={activeBranding?.workspaceName || "Proofsy Academy"}
+                        certificateCode={code || "VERIFIED-CERT"}
+                        verificationUrl={typeof window !== "undefined" ? window.location.href : "https://proofsy.tech/verify"}
+                        issueDate={certData.issuedAt || undefined}
+                      />
+
+                      <AdBanner type="inline" className="mt-2" />
 
                       <button
                         onClick={resetFileState}

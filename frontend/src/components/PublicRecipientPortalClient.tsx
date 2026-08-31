@@ -297,9 +297,20 @@ export default function PublicRecipientPortalPage() {
                         </Link>
                       </motion.div>
                       
-                      {certificate.linkedInAddUrl && (
-                        <LinkedInShareButton linkedInAddUrl={certificate.linkedInAddUrl} />
-                      )}
+                      <LinkedInShareButton
+                        linkedInAddUrl={
+                          certificate.linkedInAddUrl ||
+                          `https://www.linkedin.com/profile/add?startTask=CERTIFICATION_NAME&name=${encodeURIComponent(
+                            certificate.eventName
+                          )}&organizationName=Proofsy&issueYear=${new Date(
+                            certificate.eventDate || Date.now()
+                          ).getFullYear()}&issueMonth=${
+                            new Date(certificate.eventDate || Date.now()).getMonth() + 1
+                          }&certUrl=${encodeURIComponent(
+                            `https://proofsy.tech/verify?code=${certificate.verificationCode}`
+                          )}&certId=${encodeURIComponent(certificate.verificationCode)}`
+                        }
+                      />
 
                       {certificate.pdfUrl ? (
                         <motion.a

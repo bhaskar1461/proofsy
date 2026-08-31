@@ -1,107 +1,45 @@
-import axios from 'axios';
+import { aiApi } from './api';
 
 interface Message {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'system';
   content: string;
 }
 
-interface BedrockResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-}
-
-const BEDROCK_API_KEY = process.env.NEXT_PUBLIC_AWS_BEDROCK_API_KEY;
-const BEDROCK_REGION = process.env.NEXT_PUBLIC_AWS_REGION || 'us-east-1';
-const BEDROCK_MODEL = process.env.NEXT_PUBLIC_BEDROCK_MODEL || 'anthropic.claude-3-5-sonnet-20241022-v2:0';
-
 /**
- * Send a message to AWS Bedrock and get a response
+ * Send a message to Proofsy AI (proxied via secure backend)
  */
 export async function bedrockChat(
   messages: Message[],
   systemPrompt?: string
 ): Promise<string> {
-  if (!BEDROCK_API_KEY) {
-    throw new Error('NEXT_PUBLIC_AWS_BEDROCK_API_KEY is not configured');
-  }
-
   try {
-    const response = await axios.post(
-      `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com/model/${BEDROCK_MODEL}/invoke`,
-      {
-        anthropic_version: 'bedrock-2023-06-01',
-        max_tokens: 2048,
-        system: systemPrompt || 'You are a helpful assistant.',
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-      },
-      {
-        headers: {
-          'x-amz-bedrock-accept': 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${BEDROCK_API_KEY}`,
-        },
-      }
-    );
-
-    const bedrockResponse: BedrockResponse = response.data;
-    const textContent = bedrockResponse.content.find(c => c.type === 'text');
-    return textContent?.text || 'No response from model';
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(`Bedrock API error: ${error.response?.data?.message || error.message}`);
+    const payloadMessages: Array<{ role: string; content: string }> = [];
+    if (systemPrompt) {
+      payloadMessages.push({ role: 'system', content: systemPrompt });
     }
-    throw error;
+    for (const msg of messages) {
+      payloadMessages.push({ role: msg.role, content: msg.content });
+    }
+
+    const res = await aiApi.chat(payloadMessages);
+    if (res.success && res.data?.content) {
+      return res.data.content;
+    }
+    return 'No response received from AI service.';
+  } catch (error: any) {
+    const errorMsg = error?.message || 'Failed to communicate with AI service';
+    throw new Error(errorMsg);
   }
 }
 
 /**
- * Stream responses from Bedrock (for real-time chat)
+ * Stream responses from AI service (fallback generator)
  */
 export async function* bedrockChatStream(
   messages: Message[],
   systemPrompt?: string
 ): AsyncGenerator<string, void, unknown> {
-  if (!BEDROCK_API_KEY) {
-    throw new Error('NEXT_PUBLIC_AWS_BEDROCK_API_KEY is not configured');
-  }
-
-  try {
-    const response = await axios.post(
-      `https://bedrock-runtime.${BEDROCK_REGION}.amazonaws.com/model/${BEDROCK_MODEL}/invoke-with-response-stream`,
-      {
-        anthropic_version: 'bedrock-2023-06-01',
-        max_tokens: 2048,
-        system: systemPrompt || 'You are a helpful assistant.',
-        messages: messages.map(msg => ({
-          role: msg.role,
-          content: msg.content,
-        })),
-      },
-      {
-        headers: {
-          'x-amz-bedrock-accept': 'application/json',
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${BEDROCK_API_KEY}`,
-        },
-        responseType: 'stream',
-      }
-    );
-
-    for await (const chunk of response.data) {
-      const text = chunk.toString();
-      if (text) {
-        yield text;
-      }
-    }
-  } catch (error) {
-    if (axios.isAxiosError(error)) {
-      throw new Error(`Bedrock streaming error: ${error.response?.data?.message || error.message}`);
-    }
-    throw error;
-  }
+  const fullText = await bedrockChat(messages, systemPrompt);
+  yield fullText;
 }
+

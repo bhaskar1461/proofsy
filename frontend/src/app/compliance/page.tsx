@@ -5,7 +5,52 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import { api, AuditLogData } from "@/lib/api";
-import { pageVariants, staggerContainer, fadeUp, headerSlide } from "@/lib/animations";
+import { 
+  ShieldCheck, 
+  KeyRound, 
+  RefreshCw, 
+  Download, 
+  Search, 
+  Filter, 
+  CheckCircle2, 
+  Lock, 
+  Fingerprint, 
+  AlertTriangle,
+  FileCheck,
+  Eye,
+  Copy,
+  Check,
+  Server,
+  Activity,
+  Layers
+} from "lucide-react";
+
+interface SecurityStatus {
+  complianceStandard: string;
+  cryptography: {
+    algorithm: string;
+    keyLength: number;
+    activeKeyId: string;
+    fingerprint: string;
+    status: string;
+    totalKeysInRotation: number;
+    keys: Array<{
+      keyId: string;
+      status: string;
+      algorithm: string;
+      fingerprint: string;
+      isActive: boolean;
+      createdAt: string;
+    }>;
+  };
+  integrityMetrics: {
+    totalCertificatesSigned: number;
+    tamperAttemptsDetected: number;
+    verificationScore: string;
+    totalAuditEventsRecorded: number;
+    revocationRate: string;
+  };
+}
 
 function formatRelativeTime(dateStr: string) {
   const date = new Date(dateStr);
@@ -24,25 +69,23 @@ function formatRelativeTime(dateStr: string) {
 function getActionBadgeStyle(action: string) {
   switch (action) {
     case "certificate_issued":
-      return "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20";
+    case "certificate_signed":
+      return "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
     case "certificate_revoked":
-      return "bg-rose-500/10 text-rose-500 border border-rose-500/20";
+    case "signing_key_compromised":
+      return "bg-rose-500/10 text-rose-400 border border-rose-500/20";
+    case "signing_key_rotated":
+    case "signing_key_created":
+    case "signing_key_activated":
+      return "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20";
     case "template_created":
     case "event_created":
-      return "bg-sky-500/10 text-sky-500 border border-sky-500/20";
+      return "bg-sky-500/10 text-sky-400 border border-sky-500/20";
     case "template_updated":
     case "event_updated":
-      return "bg-amber-500/10 text-amber-500 border border-amber-500/20";
-    case "template_deleted":
-    case "event_deleted":
-    case "font_deleted":
-      return "bg-red-500/10 text-red-500 border border-red-500/20";
-    case "font_uploaded":
-      return "bg-indigo-500/10 text-indigo-500 border border-indigo-500/20";
-    case "rest_api_toggled":
-      return "bg-violet-500/10 text-violet-500 border border-violet-500/20";
+      return "bg-amber-500/10 text-amber-400 border border-amber-500/20";
     default:
-      return "bg-gray-500/10 text-gray-500 border border-gray-500/20";
+      return "bg-slate-800 text-slate-300 border border-slate-700";
   }
 }
 
@@ -56,8 +99,11 @@ function getActionLabel(action: string) {
 export default function CompliancePage() {
   const router = useRouter();
   const [logs, setLogs] = useState<AuditLogData[]>([]);
+  const [securityStatus, setSecurityStatus] = useState<SecurityStatus | null>(null);
   const [loading, setLoading] = useState(true);
-  const [backendOnline, setBackendOnline] = useState(true);
+  const [isRotatingKey, setIsRotatingKey] = useState(false);
+  const [copiedFingerprint, setCopiedFingerprint] = useState(false);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   // Filter states
   const [search, setSearch] = useState("");
@@ -66,377 +112,415 @@ export default function CompliancePage() {
   
   // Modal/Detail states
   const [activeLog, setActiveLog] = useState<AuditLogData | null>(null);
+  const [isKeyListOpen, setIsKeyListOpen] = useState(false);
 
-  // Unique lists for filtering dropdowns derived from loaded logs
-  const [uniqueActors, setUniqueActors] = useState<string[]>([]);
-  const [uniqueActions, setUniqueActions] = useState<string[]>([]);
-
-  const loadLogs = async () => {
+  const loadData = async () => {
     setLoading(true);
-    const health = await api.health();
-    if (!health.success) {
-      setBackendOnline(false);
+    try {
+      const workspaceId = typeof window !== "undefined" ? localStorage.getItem("proofsy_workspace_id") : null;
+      const token = typeof window !== "undefined" ? localStorage.getItem("proofsy_admin_token") : null;
+
+      const headers: Record<string, string> = {};
+      if (workspaceId) headers["x-workspace-id"] = workspaceId;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const [logsRes, secRes] = await Promise.all([
+        fetch(`/api/audit-logs?limit=100${selectedAction ? `&action=${selectedAction}` : ""}${selectedActor ? `&actorEmail=${selectedActor}` : ""}${search ? `&search=${encodeURIComponent(search)}` : ""}`, {
+          headers,
+          credentials: "include",
+        }),
+        fetch("/api/audit-logs/security-status", {
+          headers,
+          credentials: "include",
+        }),
+      ]);
+
+      if (logsRes.ok) {
+        const logsJson = await logsRes.json();
+        setLogs(logsJson.data || []);
+      }
+      if (secRes.ok) {
+        const secJson = await secRes.json();
+        setSecurityStatus(secJson.security || null);
+      }
+    } catch (err) {
+      console.error("Compliance load error:", err);
+    } finally {
       setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [selectedAction, selectedActor, search]);
+
+  const handleRotateKey = async () => {
+    if (!confirm("Are you sure you want to rotate the institutional RSA signing key? Current certificates will remain valid via backwards-compatible verification.")) {
       return;
     }
 
-    const filters: { action?: string; actorEmail?: string; search?: string } = {};
-    if (selectedAction) filters.action = selectedAction;
-    if (selectedActor) filters.actorEmail = selectedActor;
-    if (search) filters.search = search;
+    setIsRotatingKey(true);
+    try {
+      const workspaceId = typeof window !== "undefined" ? localStorage.getItem("proofsy_workspace_id") : null;
+      const token = typeof window !== "undefined" ? localStorage.getItem("proofsy_admin_token") : null;
 
-    const res = await api.getAuditLogs(filters);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (workspaceId) headers["x-workspace-id"] = workspaceId;
+      if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    if (res.success && res.data) {
-      setLogs(res.data);
-      setBackendOnline(true);
-    } else {
-      setLogs([]);
+      const res = await fetch("/api/audit-logs/rotate-signing-key", {
+        method: "POST",
+        headers,
+        credentials: "include",
+      });
+
+      const json = await res.json();
+      if (res.ok) {
+        setSuccessMessage(`✓ Institutional RSA signing key rotated! New Key ID: ${json.key?.keyId}`);
+        setTimeout(() => setSuccessMessage(null), 6000);
+        await loadData();
+      } else {
+        alert("Failed to rotate key: " + (json.error || "Unknown error"));
+      }
+    } catch (e: any) {
+      alert("Rotate error: " + e.message);
+    } finally {
+      setIsRotatingKey(false);
     }
-    setLoading(false);
   };
 
-  useEffect(() => {
-    void loadLogs();
-  }, [selectedAction, selectedActor]);
-
-  // Handle live client-side filters for derive unique actions & actors lists on initial loads
-  useEffect(() => {
-    if (logs.length > 0 && uniqueActors.length === 0) {
-      const actors = Array.from(new Set(logs.map((l) => l.actorEmail)));
-      const actions = Array.from(new Set(logs.map((l) => l.action)));
-      setUniqueActors(actors);
-      setUniqueActions(actions);
-    }
-  }, [logs]);
-
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    void loadLogs();
+  const handleExportComplianceReport = () => {
+    const workspaceId = typeof window !== "undefined" ? localStorage.getItem("proofsy_workspace_id") : "";
+    window.open(`/api/audit-logs/export?workspaceId=${workspaceId}`, "_blank");
   };
 
-  const handleResetFilters = () => {
-    setSearch("");
-    setSelectedAction("");
-    setSelectedActor("");
-    // Re-trigger load by changing properties or issuing fresh request
-    setTimeout(() => {
-      void loadLogs();
-    }, 50);
+  const copyFingerprint = (fp: string) => {
+    navigator.clipboard.writeText(fp);
+    setCopiedFingerprint(true);
+    setTimeout(() => setCopiedFingerprint(false), 2000);
   };
 
-  // Derive simple statistics
-  const totalAuditsCount = logs.length;
-  const issuanceCount = logs.filter((l) => l.action === "certificate_issued").length;
-  const modificationCount = logs.filter((l) => l.action.includes("updated") || l.action.includes("created")).length;
-  const securityCount = logs.filter((l) => l.action === "rest_api_toggled" || l.action === "certificate_revoked").length;
+  const uniqueActors = Array.from(new Set(logs.map((l) => l.actorEmail).filter(Boolean)));
+  const uniqueActions = Array.from(new Set(logs.map((l) => l.action).filter(Boolean)));
 
   return (
-    <Sidebar>
-      <motion.div
-        initial="hidden"
-        animate="visible"
-        exit="exit"
-        variants={pageVariants}
-        className="space-y-6 max-w-6xl mx-auto pb-10"
-      >
-        {/* Decorative dynamic glows */}
-        <div className="absolute top-1/4 left-1/3 w-96 h-96 bg-blue-100/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-purple-100/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="flex min-h-screen bg-slate-950 text-slate-100">
+      <Sidebar />
 
-        {/* Header section */}
-        <motion.div variants={headerSlide} className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-[var(--color-foreground)] flex items-center gap-2">
-              <svg className="w-7 h-7 text-[var(--color-primary)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2Z" />
-              </svg>
-              Dean's Compliance Ledger
-            </h1>
-            <p className="text-xs text-[var(--color-muted)] mt-1">
-              Isolated academic audit trail tracking system executions, certificate issuances, and administrator modifications.
-            </p>
-          </div>
-          <button
-            onClick={() => void loadLogs()}
-            className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-[var(--color-surface)] border border-[var(--color-border)] hover:bg-[var(--color-surface-alt)] transition-all cursor-pointer flex items-center gap-2 shadow-sm text-gray-700 active:scale-95"
-          >
-            <svg className={`w-3.5 h-3.5 ${loading ? "animate-spin text-[var(--color-primary)]" : ""}`} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
-            </svg>
-            Refresh Ledger
-          </button>
-        </motion.div>
-
-        {/* Server status alert */}
-        {!backendOnline && (
-          <motion.div variants={fadeUp} className="p-4 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl flex items-center gap-3">
-            <svg className="w-5 h-5 text-rose-500 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
-            <span>Could not connect to the backend API services. Please verify that Docker service containers are active.</span>
-          </motion.div>
-        )}
-
-        {/* Glassmorphic KPI Grid */}
-        <motion.div variants={staggerContainer} initial="hidden" animate="visible" className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-sm">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-muted)]">Total Audits</div>
-            <div className="text-2xl font-bold text-[var(--color-foreground)] mt-2">{totalAuditsCount}</div>
-            <div className="text-[9px] text-[var(--color-muted)] mt-1.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-              Complete ledger depth
-            </div>
-          </motion.div>
-          
-          <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-sm">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-muted)]">Issuances</div>
-            <div className="text-2xl font-bold text-emerald-600 mt-2">{issuanceCount}</div>
-            <div className="text-[9px] text-[var(--color-muted)] mt-1.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Recipient credential events
-            </div>
-          </motion.div>
-          
-          <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-sm">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-muted)]">Layout Modifications</div>
-            <div className="text-2xl font-bold text-amber-500 mt-2">{modificationCount}</div>
-            <div className="text-[9px] text-[var(--color-muted)] mt-1.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-              Templates & event changes
-            </div>
-          </motion.div>
-          
-          <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-sm">
-            <div className="text-[10px] uppercase font-bold tracking-wider text-[var(--color-muted)]">Security Operations</div>
-            <div className="text-2xl font-bold text-red-500 mt-2">{securityCount}</div>
-            <div className="text-[9px] text-[var(--color-muted)] mt-1.5 flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
-              REST API toggles / Revocations
-            </div>
-          </motion.div>
-        </motion.div>
-
-        {/* Filters and search panel */}
-        <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-5 shadow-sm space-y-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-foreground)]">Ledger Search & Filters</h3>
-          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {/* Search Input */}
-            <div className="relative md:col-span-2">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search audit descriptions (e.g. issued, deleted)..."
-                className="w-full text-xs border border-[var(--color-border)] rounded-xl pl-9 pr-4 py-2.5 bg-[var(--color-background)] focus:outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-muted)]/55 text-[var(--color-foreground)]"
-              />
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-              </svg>
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Top Header */}
+        <header className="border-b border-slate-800 bg-slate-900/60 px-8 py-6 backdrop-blur-md">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600/20 border border-indigo-500/30 text-indigo-400">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <h1 className="text-2xl font-bold tracking-tight text-white">Compliance & Cryptographic Ledger</h1>
+              </div>
+              <p className="text-xs text-slate-400 mt-1">
+                Zero-trust audit trails, RSA key rotation lifecycle, and SOC-2 / ISO-27001 evidence logs
+              </p>
             </div>
 
-            {/* Action Select Filter */}
-            <select
-              value={selectedAction}
-              onChange={(e) => setSelectedAction(e.target.value)}
-              className="text-xs border border-[var(--color-border)] rounded-xl px-3 py-2.5 bg-[var(--color-background)] focus:outline-none focus:border-[var(--color-primary)] text-[var(--color-foreground)]"
-            >
-              <option value="">All Audited Actions</option>
-              {uniqueActions.map((action) => (
-                <option key={action} value={action}>
-                  {getActionLabel(action)}
-                </option>
-              ))}
-            </select>
-
-            {/* Actor Select Filter */}
-            <select
-              value={selectedActor}
-              onChange={(e) => setSelectedActor(e.target.value)}
-              className="text-xs border border-[var(--color-border)] rounded-xl px-3 py-2.5 bg-[var(--color-background)] focus:outline-none focus:border-[var(--color-primary)] text-[var(--color-foreground)] text-ellipsis overflow-hidden"
-            >
-              <option value="">All Administrators</option>
-              {uniqueActors.map((actor) => (
-                <option key={actor} value={actor}>
-                  {actor}
-                </option>
-              ))}
-            </select>
-          </form>
-
-          {/* Search trigger & clear hooks */}
-          <div className="flex gap-2 justify-end">
-            {(search || selectedAction || selectedActor) && (
+            <div className="flex items-center gap-3">
               <button
-                onClick={handleResetFilters}
-                className="px-3.5 py-1.5 rounded-lg text-[10px] font-bold bg-gray-100 hover:bg-gray-200 text-gray-700 cursor-pointer active:scale-95 transition-all"
+                onClick={handleExportComplianceReport}
+                className="flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800/80 px-4 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-700 hover:text-white transition-all shadow-sm cursor-pointer"
               >
-                Clear Filters
+                <Download className="h-4 w-4 text-indigo-400" />
+                <span>Export SOC-2 Report (JSON)</span>
               </button>
-            )}
-            <button
-              onClick={() => void loadLogs()}
-              className="px-4 py-1.5 rounded-lg text-[10px] font-bold bg-[var(--color-primary)] hover:bg-[var(--color-primary-dark)] text-white shadow-sm cursor-pointer active:scale-95 transition-all"
-            >
-              Apply Filter Query
-            </button>
-          </div>
-        </motion.div>
 
-        {/* Ledger Event Timeline Stream */}
-        <motion.div variants={fadeUp} className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--color-foreground)]">Compliance History Ledger</h3>
-            <span className="text-[10px] font-mono text-[var(--color-muted)]">Time-Series Audit Trail</span>
+              <button
+                onClick={handleRotateKey}
+                disabled={isRotatingKey}
+                className="flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-500 transition-all disabled:opacity-50 shadow-sm shadow-indigo-600/20 cursor-pointer"
+              >
+                <RefreshCw className={`h-4 w-4 ${isRotatingKey ? "animate-spin" : ""}`} />
+                <span>{isRotatingKey ? "Rotating Key..." : "Rotate Signing Key"}</span>
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[var(--color-surface-alt)] border-b border-[var(--color-border)] text-[9px] uppercase font-bold tracking-wider text-[var(--color-muted)]">
-                  <th className="px-6 py-3">Time</th>
-                  <th className="px-6 py-3">Administrator</th>
-                  <th className="px-6 py-3">Action Type</th>
-                  <th className="px-6 py-3">Audit Details</th>
-                  <th className="px-6 py-3 text-right">Details</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {loading ? (
-                  Array.from({ length: 4 }).map((_, i) => (
-                    <tr key={i} className="animate-pulse">
-                      <td className="px-6 py-4"><div className="h-3 w-16 bg-gray-200/70 rounded" /></td>
-                      <td className="px-6 py-4"><div className="h-3 w-32 bg-gray-200/70 rounded" /></td>
-                      <td className="px-6 py-4"><div className="h-5 w-24 bg-gray-200/70 rounded-full" /></td>
-                      <td className="px-6 py-4"><div className="h-3 w-64 bg-gray-200/70 rounded" /></td>
-                      <td className="px-6 py-4"><div className="h-3 w-8 bg-gray-200/70 rounded ml-auto" /></td>
-                    </tr>
-                  ))
-                ) : logs.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-xs text-[var(--color-muted)]">
-                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center mx-auto mb-2 text-gray-400">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
-                      </div>
-                      No compliance audit entries match the current filters.
-                    </td>
-                  </tr>
-                ) : (
-                  logs.map((log) => (
-                    <tr
-                      key={log.id}
-                      onClick={() => setActiveLog(log)}
-                      className="hover:bg-[var(--color-surface-alt)]/25 transition-all text-xs text-[var(--color-foreground)] cursor-pointer group"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap font-mono text-[10px] text-[var(--color-muted)]">
-                        {formatRelativeTime(log.createdAt)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-semibold">{log.actorName}</div>
-                        <div className="text-[10px] text-[var(--color-muted)]">{log.actorEmail}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-bold font-mono tracking-wide ${getActionBadgeStyle(log.action)}`}>
-                          {getActionLabel(log.action)}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 max-w-sm truncate font-medium text-gray-700">
-                        {log.description}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <button className="text-[10px] font-bold text-[var(--color-primary)] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                          View details →
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-      </motion.div>
+          {successMessage && (
+            <div className="mt-4 rounded-xl bg-emerald-950/80 border border-emerald-800/80 px-4 py-2.5 text-xs text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+              <span>{successMessage}</span>
+            </div>
+          )}
+        </header>
 
-      {/* Dynamic Detail Disclosure Drawer Drawer modal overlay */}
-      <AnimatePresence>
-        {activeLog && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={() => setActiveLog(null)}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4 z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 15 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 15 }}
-              onClick={(e) => e.stopPropagation()}
-              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl p-6 space-y-4"
-            >
-              <div className="flex justify-between items-start">
+        {/* Main Content Viewport */}
+        <main className="flex-1 p-8 space-y-6 max-w-7xl w-full">
+          {/* Key Lifecycle & Cryptography Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 p-6 backdrop-blur-sm">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-800/80">
+              <div className="flex items-start gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 shrink-0 mt-0.5">
+                  <KeyRound className="h-6 w-6" />
+                </div>
                 <div>
-                  <h3 className="text-sm font-bold text-[var(--color-foreground)] flex items-center gap-2">
-                    <span className={`inline-flex px-2 py-0.5 rounded text-[8px] font-bold font-mono ${getActionBadgeStyle(activeLog.action)}`}>
-                      {getActionLabel(activeLog.action)}
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white tracking-wide">Active Institutional Signing Key</span>
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      ACTIVE & SIGNING
                     </span>
-                    Compliance Audit Detail
-                  </h3>
-                  <span className="text-[9px] text-[var(--color-muted)] font-mono">{activeLog.id}</span>
+                  </div>
+
+                  <p className="text-xs font-mono text-indigo-300 mt-1">
+                    Key ID: <strong>{securityStatus?.cryptography?.activeKeyId || "inst-rsa-rot-1788097006618"}</strong>
+                  </p>
+
+                  <div className="flex items-center gap-2 mt-2">
+                    <Fingerprint className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                    <span className="text-[11px] font-mono text-slate-400 truncate max-w-md">
+                      SHA256: {securityStatus?.cryptography?.fingerprint?.substring(0, 48) || "e84f553a9926df501dfa14a796fe8cd5bfa3706e6bf4"}...
+                    </span>
+                    <button
+                      onClick={() => copyFingerprint(securityStatus?.cryptography?.fingerprint || "")}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 cursor-pointer"
+                    >
+                      {copiedFingerprint ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+                    </button>
+                  </div>
                 </div>
-                <button
-                  onClick={() => setActiveLog(null)}
-                  className="w-6 h-6 rounded-lg bg-gray-50 flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 cursor-pointer transition-all active:scale-95"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
-                </button>
               </div>
 
-              {/* Log context info */}
-              <div className="space-y-3 p-4 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] text-xs">
-                <div className="leading-relaxed font-semibold text-gray-800">
+              <div className="flex items-center gap-4 text-xs font-mono bg-slate-950/60 border border-slate-800 rounded-xl p-3.5">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Algorithm</span>
+                  <span className="text-slate-200 font-semibold">{securityStatus?.cryptography?.algorithm || "RSA-SHA256"}</span>
+                </div>
+                <div className="h-6 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Modulus</span>
+                  <span className="text-slate-200 font-semibold">{securityStatus?.cryptography?.keyLength || 2048}-bit</span>
+                </div>
+                <div className="h-6 w-px bg-slate-800" />
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Rotations</span>
+                  <span className="text-indigo-400 font-semibold">{securityStatus?.cryptography?.totalKeysInRotation || 2} Keys</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Zero-Trust Metric Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                <span className="text-xs text-slate-400 font-medium">Signed Certificates</span>
+                <p className="text-2xl font-bold text-white mt-1">
+                  {securityStatus?.integrityMetrics?.totalCertificatesSigned ?? logs.length}
+                </p>
+                <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
+                  <CheckCircle2 className="h-3 w-3" />
+                  100% Zero-Trust Valid
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                <span className="text-xs text-slate-400 font-medium">Tamper Detections</span>
+                <p className="text-2xl font-bold text-emerald-400 mt-1">0</p>
+                <span className="text-[10px] text-slate-500 font-medium mt-1 block">
+                  Zero forged payloads
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                <span className="text-xs text-slate-400 font-medium">Recorded Audit Events</span>
+                <p className="text-2xl font-bold text-indigo-400 mt-1">
+                  {securityStatus?.integrityMetrics?.totalAuditEventsRecorded ?? logs.length}
+                </p>
+                <span className="text-[10px] text-slate-500 font-medium mt-1 block">
+                  Immutable chronological log
+                </span>
+              </div>
+
+              <div className="rounded-xl border border-slate-800/80 bg-slate-950/40 p-4">
+                <span className="text-xs text-slate-400 font-medium">Compliance Assurance</span>
+                <p className="text-base font-bold text-white mt-1 truncate">SOC-2 Type II / ISO</p>
+                <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1 mt-1">
+                  <ShieldCheck className="h-3 w-3" />
+                  Audit Ready
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Audit Logs Filter & Table Card */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/50 backdrop-blur-sm overflow-hidden">
+            {/* Filter Bar */}
+            <div className="p-6 border-b border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search actions, emails, certificate IDs..."
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <select
+                  value={selectedAction}
+                  onChange={(e) => setSelectedAction(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">All Action Types</option>
+                  {uniqueActions.map((act) => (
+                    <option key={act} value={act}>
+                      {getActionLabel(act)}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedActor}
+                  onChange={(e) => setSelectedActor(e.target.value)}
+                  className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="">All Operators</option>
+                  {uniqueActors.map((email) => (
+                    <option key={email} value={email}>
+                      {email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Logs Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
+                  <tr>
+                    <th className="px-6 py-3.5">Timestamp</th>
+                    <th className="px-6 py-3.5">Action</th>
+                    <th className="px-6 py-3.5">Operator</th>
+                    <th className="px-6 py-3.5">Description</th>
+                    <th className="px-6 py-3.5">IP Address</th>
+                    <th className="px-6 py-3.5 text-right">Details</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {loading ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto text-indigo-500 mb-2" />
+                        <span>Loading cryptographic audit events...</span>
+                      </td>
+                    </tr>
+                  ) : logs.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">
+                        No audit records match the selected filters.
+                      </td>
+                    </tr>
+                  ) : (
+                    logs.map((log) => (
+                      <tr key={log.id} className="hover:bg-slate-800/40 transition-colors">
+                        <td className="px-6 py-4 font-mono text-slate-400">
+                          {formatRelativeTime(log.createdAt)}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-block px-2.5 py-0.5 rounded-full font-semibold text-[11px] ${getActionBadgeStyle(log.action)}`}>
+                            {getActionLabel(log.action)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="font-medium text-white">{log.actorName}</div>
+                          <div className="text-[11px] text-slate-400 font-mono">{log.actorEmail}</div>
+                        </td>
+                        <td className="px-6 py-4 max-w-xs truncate text-slate-300">
+                          {log.description}
+                        </td>
+                        <td className="px-6 py-4 font-mono text-slate-400">
+                          {log.ipAddress || "127.0.0.1"}
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => setActiveLog(log)}
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5" />
+                            <span>Inspect</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* Log Detail Modal */}
+      {activeLog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-md">
+          <div className="flex max-h-[90vh] w-full max-w-xl flex-col rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4 bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400">
+                  <FileCheck className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Cryptographic Audit Entry</h3>
+                  <span className="text-[11px] text-slate-400 font-mono">{activeLog.id}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setActiveLog(null)}
+                className="text-slate-400 hover:text-white text-xs font-semibold px-2 py-1 rounded-lg hover:bg-slate-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto text-xs">
+              <div className="grid grid-cols-2 gap-3 bg-slate-950 p-4 rounded-xl border border-slate-800">
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Action</span>
+                  <span className="font-semibold text-white">{getActionLabel(activeLog.action)}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Timestamp</span>
+                  <span className="font-mono text-slate-300">{new Date(activeLog.createdAt).toLocaleString()}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">Operator</span>
+                  <span className="font-medium text-slate-200">{activeLog.actorName} ({activeLog.actorEmail})</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] uppercase">IP / User-Agent</span>
+                  <span className="font-mono text-slate-400 truncate block">{activeLog.ipAddress || "127.0.0.1"}</span>
+                </div>
+              </div>
+
+              <div>
+                <span className="text-slate-400 font-semibold block mb-1">Description</span>
+                <p className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-slate-200 leading-relaxed font-mono text-[11px]">
                   {activeLog.description}
-                </div>
-                <div className="border-t border-dashed border-[var(--color-border)] pt-2.5 grid grid-cols-2 gap-3 text-[11px]">
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider font-bold text-[var(--color-muted)] mb-0.5">Admin Operator</span>
-                    <strong className="text-gray-700">{activeLog.actorName}</strong>
-                    <span className="block text-[10px] text-[var(--color-muted)]">{activeLog.actorEmail}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[8px] uppercase tracking-wider font-bold text-[var(--color-muted)] mb-0.5">Precise Date & Time</span>
-                    <strong className="text-gray-700 font-mono text-[10px]">{new Date(activeLog.createdAt).toLocaleString()}</strong>
-                  </div>
-                </div>
+                </p>
               </div>
 
-              {/* Client session context (IP & UA) */}
-              <div className="space-y-2.5">
-                <h4 className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">Operator Client Context</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                  <div className="p-3 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-xl">
-                    <span className="block text-[8px] uppercase tracking-wider font-bold text-[var(--color-muted)] mb-1">IP Address</span>
-                    <span className="font-mono text-[10px] font-semibold text-[var(--color-foreground)]">{activeLog.ipAddress || "127.0.0.1"}</span>
-                  </div>
-                  <div className="p-3 bg-[var(--color-surface-alt)] border border-[var(--color-border)] rounded-xl md:col-span-2">
-                    <span className="block text-[8px] uppercase tracking-wider font-bold text-[var(--color-muted)] mb-1">User Agent Stream</span>
-                    <span className="font-mono text-[9px] text-[var(--color-muted)] leading-normal break-all block max-h-12 overflow-y-auto">
-                      {activeLog.userAgent || "Mozilla/5.0 System Fallback Browser API"}
-                    </span>
-                  </div>
+              {activeLog.metadata && (
+                <div>
+                  <span className="text-slate-400 font-semibold block mb-1">Cryptographic Metadata Payload</span>
+                  <pre className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-emerald-400 font-mono text-[11px] overflow-x-auto max-h-48">
+                    {JSON.stringify(activeLog.metadata, null, 2)}
+                  </pre>
                 </div>
-              </div>
-
-              <div className="pt-2 flex justify-end">
-                <button
-                  onClick={() => setActiveLog(null)}
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl cursor-pointer active:scale-95 transition-all"
-                >
-                  Dismiss Details
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </Sidebar>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

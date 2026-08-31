@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "name_for_human": "Proofsy Certificate Verifier & Issuer",
+  "name_for_model": "proofsy_credentials",
+  "description_for_human": "Verify and issue cryptographically signed digital certificates and credentials.",
+  "description_for_model": "Plugin for checking the cryptographic validity of digital credentials, certificates, diplomas, and badges issued by Proofsy, and checking verification status by verification code or PDF file.",
+  "auth": {
+    "type": "none"
+  },
+  "api": {
+    "type": "openapi",
+    "url": "https://proofsy.tech/api/docs/openapi.json",
+    "is_user_authenticated": false
+  },
+  "logo_url": "https://proofsy.tech/logo.png",
+  "contact_email": "support@proofsy.tech",
+  "legal_info_url": "https://proofsy.tech/compliance"
+}

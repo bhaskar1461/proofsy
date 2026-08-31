@@ -30,12 +30,18 @@ const AuditLogSchema = new mongoose.Schema(
       required: true,
       enum: [
         "certificate_issued",
+        "certificate_signed",
         "certificate_revoked",
         "certificate_suspended",
         "certificate_reinstated",
         "certificate_renewed",
         "certificate_expired",
         "certificate_expiry_updated",
+        "signing_key_created",
+        "signing_key_activated",
+        "signing_key_rotated",
+        "signing_key_retired",
+        "signing_key_compromised",
         "template_created",
         "template_updated",
         "template_deleted",
@@ -54,7 +60,7 @@ const AuditLogSchema = new mongoose.Schema(
     targetModel: {
       type: String,
       required: false,
-      enum: ["Certificate", "Event", "Template", "CustomFont", "Integration"],
+      enum: ["Certificate", "Event", "Template", "CustomFont", "Integration", "SigningKey", "IssuanceBatch"],
     },
     description: {
       type: String,

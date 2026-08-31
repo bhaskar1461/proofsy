@@ -1,0 +1,3 @@
+name,email,role,admin,password
+Admin,admin@test.io,owner,true,hunter2
+User,user@test.io,editor,false,pass123

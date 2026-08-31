@@ -165,7 +165,7 @@ const Organization = require("../models/Organization");
 const User = require("../models/User");
 const { getCertificateQueue } = require("../services/certificateQueue");
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 
 function generateVerificationCode() {
   const token = crypto.randomBytes(16).toString("base64url").toUpperCase();
@@ -178,11 +178,15 @@ async function fetchGoogleSheetRecipients(org) {
     throw new Error("Google Sheets integration is not connected or configured.");
   }
 
-  const sheetUrl = googleSheetsConfig.sheetUrl;
+  const sheetUrl = String(googleSheetsConfig.sheetUrl).trim();
   const match = sheetUrl.match(/\/d\/([a-zA-Z0-9-_]+)/);
   const spreadsheetId = match ? match[1] : sheetUrl;
 
-  const response = await fetch(`https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv`);
+  if (!/^[a-zA-Z0-9-_]{10,120}$/.test(spreadsheetId)) {
+    throw new Error("Invalid Google Sheets URL or Spreadsheet ID format.");
+  }
+
+  const response = await fetch(`https://docs.google.com/spreadsheets/d/${encodeURIComponent(spreadsheetId)}/export?format=csv`);
   if (!response.ok) {
     throw new Error("Failed to fetch spreadsheet. Verify that your sheet is shared with 'Anyone with the link can view'.");
   }

@@ -32,10 +32,10 @@ const protect = async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     req.member = await TeamMember.findById(decoded.id);
-    if (!req.member) {
+    if (!req.member || req.member.isActive === false) {
       return res.status(401).json({
         success: false,
-        error: "Not authorized, user not found",
+        error: "Not authorized, user not found or account deactivated",
       });
     }
 
@@ -151,4 +151,30 @@ const protectApiKey = async (req, res, next) => {
   }
 };
 
-module.exports = { protect, authorize, protectRecipient, protectApiKey };
+const protectOptional = async (req, res, next) => {
+  let token;
+  if (req.cookies && req.cookies.token) {
+    token = req.cookies.token;
+  } else if (
+    req.headers.authorization &&
+    req.headers.authorization.startsWith("Bearer")
+  ) {
+    token = req.headers.authorization.split(" ")[1];
+  }
+
+  if (token && process.env.JWT_SECRET) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.member = await TeamMember.findById(decoded.id);
+      if (req.member) {
+        req.organizationId = req.member.organizationId;
+        req.workspaceId = req.member.workspaceId;
+      }
+    } catch {
+      // Continue without hard failure
+    }
+  }
+  next();
+};
+
+module.exports = { protect, protectOptional, authorize, protectRecipient, protectApiKey };

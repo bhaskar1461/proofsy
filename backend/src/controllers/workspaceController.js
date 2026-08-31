@@ -105,13 +105,30 @@ exports.inviteMember = async (req, res) => {
       return res.status(400).json({ success: false, error: "Email already registered in college team" });
     }
 
+    // Role hierarchy & mass assignment guard:
+    const allowedRoles = ["admin", "editor", "viewer"];
+    if (!allowedRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: `Invalid role specified. Allowed roles: ${allowedRoles.join(", ")}`,
+      });
+    }
+
+    // Admins can only invite editor or viewer; only owners can invite admins
+    if (req.member.role === "admin" && role === "admin") {
+      return res.status(403).json({
+        success: false,
+        error: "Only organization owners can grant admin privileges.",
+      });
+    }
+
     const newMember = await TeamMember.create({
       organizationId: req.organizationId,
       workspaceId: workspace._id,
-      name,
+      name: String(name).trim().slice(0, 200),
       email: normalizedEmail,
       password,
-      role, // admin, editor, viewer
+      role,
     });
 
     return res.status(201).json({

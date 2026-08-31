@@ -2,11 +2,12 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const csv = require("csv-parser");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Event = require("../models/Event");
 const Certificate = require("../models/Certificate");
+const IssuanceBatch = require("../models/IssuanceBatch");
 const { getCertificateQueue } = require("../services/certificateQueue");
 const auditService = require("../services/auditService");
 
@@ -27,6 +28,7 @@ exports.generateCertificates = async (req, res) => {
 
   try {
     const { eventId } = req.body;
+    const idempotencyKey = (req.body.idempotencyKey || req.headers["x-idempotency-key"] || "").trim() || null;
 
     if (!eventId) {
       return res.status(400).json({ success: false, error: "Missing eventId" });
@@ -37,6 +39,27 @@ exports.generateCertificates = async (req, res) => {
 
     if (!mongoose.Types.ObjectId.isValid(eventId)) {
       return res.status(400).json({ success: false, error: "Invalid eventId" });
+    }
+
+    // Check Idempotency: If a batch with this key already exists for this workspace, return it
+    if (idempotencyKey) {
+      const existingBatch = await IssuanceBatch.findOne({
+        idempotencyKey,
+        workspaceId: req.workspaceId,
+      });
+      if (existingBatch) {
+        return res.status(200).json({
+          success: true,
+          message: "Existing issuance batch returned (idempotent request).",
+          data: {
+            jobId: existingBatch._id.toString(),
+            batchId: existingBatch._id.toString(),
+            totalRowsProcessed: existingBatch.totalCount,
+            status: existingBatch.status,
+            isExistingBatch: true,
+          },
+        });
+      }
     }
 
     // Verify event exists AND belongs to the caller's workspace.
@@ -130,70 +153,85 @@ exports.generateCertificates = async (req, res) => {
       existingCertSet.add(cert.userId.toString());
     }
 
-    // 5. Prepare and execute single bulk insert for remaining certificates
-    const newCertificates = [];
+    // 5. Create IssuanceBatch entity for tracking
+    const pendingCertCandidates = [];
     for (const userId of allUserIds) {
       if (!existingCertSet.has(userId.toString())) {
-        newCertificates.push({
-          userId: userId,
-          eventId: event._id,
-          organizationId: event.organizationId,
-          workspaceId: event.workspaceId,
-          verificationCode: generateVerificationCode(),
-          status: "pending"
+        pendingCertCandidates.push(userId);
+      }
+    }
+
+    if (pendingCertCandidates.length > 0) {
+      const workspace = req.workspace;
+      if (workspace && workspace.plan !== "annual-pass" && workspace.credits < pendingCertCandidates.length) {
+        return res.status(402).json({
+          success: false,
+          error: `Insufficient credits. This operation requires ${pendingCertCandidates.length} credits, but your workspace only has ${workspace.credits} credits remaining. Please upgrade your plan.`
         });
       }
     }
 
-    if (newCertificates.length > 0) {
-      const workspace = req.workspace;
-      if (workspace.plan !== "annual-pass" && workspace.credits < newCertificates.length) {
-        return res.status(402).json({
-          success: false,
-          error: `Insufficient credits. This operation requires ${newCertificates.length} credits, but your workspace only has ${workspace.credits} credits remaining. Please upgrade your plan.`
-        });
-      }
+    const batch = await IssuanceBatch.create({
+      workspaceId: event.workspaceId,
+      organizationId: event.organizationId,
+      eventId: event._id,
+      createdBy: req.member?._id || null,
+      idempotencyKey: idempotencyKey || undefined,
+      totalCount: pendingCertCandidates.length,
+      pendingCount: pendingCertCandidates.length,
+      status: pendingCertCandidates.length > 0 ? "queued" : "completed",
+      startedAt: new Date(),
+    });
+
+    const newCertificates = [];
+    for (const userId of pendingCertCandidates) {
+      newCertificates.push({
+        userId: userId,
+        eventId: event._id,
+        organizationId: event.organizationId,
+        workspaceId: event.workspaceId,
+        batchId: batch._id,
+        verificationCode: generateVerificationCode(),
+        status: "pending",
+        signingProvider: "institution",
+      });
     }
 
     let created = 0;
-    const jobId = uuidv4();
 
     if (newCertificates.length > 0) {
-      // insertMany handles tens of thousands fine. ordered:false keeps inserting
-      // even if a rare duplicate verification code collides (extremely unlikely
-      // with 128-bit tokens); we count the successful inserts.
       try {
         const insertedCerts = await Certificate.insertMany(newCertificates, { ordered: false });
         created = insertedCerts.length;
       } catch (insertErr) {
-        // Partial success: BulkWriteError carries the number of inserted docs.
         created = insertErr.result?.insertedCount ?? insertErr.insertedDocs?.length ?? 0;
         if (created === 0) throw insertErr;
       }
 
       // Deduct credits from workspace
       const workspace = req.workspace;
-      if (workspace.plan !== "annual-pass") {
+      if (workspace && workspace.plan !== "annual-pass") {
         workspace.credits = Math.max(0, workspace.credits - created);
         await workspace.save();
       }
     }
 
-    // Push certificate generation to the background worker via a singleton Bull
-    // queue. If Redis is unavailable, fall back to synchronous generation.
+    // Push certificate generation to the background worker via Bull queue
     const certQueue = getCertificateQueue();
+    const jobPayload = { eventId: event._id.toString(), batchId: batch._id.toString() };
+
     if (certQueue) {
       try {
-        await certQueue.add({ eventId: event._id.toString() });
-        console.log(`[API] Queued certificate generation for event ${event._id}`);
+        await certQueue.add(jobPayload);
+        console.log(`[API] Queued certificate generation for event ${event._id} (Batch: ${batch._id})`);
       } catch (e) {
         console.warn("[API] Redis queue unavailable, generating synchronously:", e.message);
         const { queueCertificateGeneration } = require("../workers/certificateWorker");
-        queueCertificateGeneration(event._id.toString());
+        queueCertificateGeneration(event._id.toString(), batch._id.toString());
       }
     } else {
       const { queueCertificateGeneration } = require("../workers/certificateWorker");
-      queueCertificateGeneration(event._id.toString());
+      queueCertificateGeneration(event._id.toString(), batch._id.toString());
     }
 
     if (created > 0) {
@@ -202,7 +240,7 @@ exports.generateCertificates = async (req, res) => {
         "certificate_issued",
         event._id,
         "Event",
-        `Issued ${created} certificates in bulk for event "${event.name}" via CSV upload`
+        `Issued ${created} certificates in bulk for event "${event.name}" via CSV upload (Batch: ${batch._id})`
       );
     }
 
@@ -210,18 +248,60 @@ exports.generateCertificates = async (req, res) => {
       success: true,
       message: "Certificate generation job queued successfully.",
       data: {
-        jobId,
+        jobId: batch._id.toString(),
+        batchId: batch._id.toString(),
         totalRowsProcessed: created,
+        status: batch.status,
       },
     });
   } catch (err) {
     console.error("generateCertificates error:", err);
     return res.status(500).json({ success: false, error: "Internal server error" });
   } finally {
-    // Always clean up uploaded file, even on errors
     if (file?.path && fs.existsSync(file.path)) {
       try { fs.unlinkSync(file.path); } catch { /* ignore cleanup errors */ }
     }
+  }
+};
+
+// GET /api/certificates/batch/:batchId
+exports.getBatchStatus = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(batchId)) {
+      return res.status(400).json({ success: false, error: "Invalid batchId format" });
+    }
+
+    const batch = await IssuanceBatch.findOne({
+      _id: batchId,
+      workspaceId: req.workspaceId,
+    });
+
+    if (!batch) {
+      return res.status(404).json({ success: false, error: "Issuance batch not found or unauthorized" });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        id: batch._id,
+        eventId: batch.eventId,
+        status: batch.status,
+        totalCount: batch.totalCount,
+        pendingCount: batch.pendingCount,
+        processingCount: batch.processingCount,
+        completedCount: batch.completedCount,
+        failedCount: batch.failedCount,
+        errors: batch.errors,
+        startedAt: batch.startedAt ? batch.startedAt.toISOString() : null,
+        completedAt: batch.completedAt ? batch.completedAt.toISOString() : null,
+        createdAt: batch.createdAt.toISOString(),
+      },
+    });
+  } catch (err) {
+    console.error("getBatchStatus error:", err);
+    return res.status(500).json({ success: false, error: "Internal server error" });
   }
 };
 
@@ -259,6 +339,10 @@ exports.listCertificates = async (req, res) => {
         pngUrl: c.pngUrl || null,
         svgUrl: c.svgUrl || null,
         status: c.status,
+        signingKeyId: c.signingKeyId || null,
+        signingProvider: c.signingProvider || "institution",
+        signatureAlgorithm: c.signatureAlgorithm || "RSA-SHA256",
+        signedAt: c.signedAt ? c.signedAt.toISOString() : (c.createdAt ? c.createdAt.toISOString() : null),
         expiresAt: c.expiresAt ? c.expiresAt.toISOString() : null,
         revokedAt: c.revokedAt ? c.revokedAt.toISOString() : null,
         revocationReason: c.revocationReason || "",
@@ -349,6 +433,10 @@ exports.getCertificateById = async (req, res) => {
         pngUrl: certificate.pngUrl || null,
         svgUrl: certificate.svgUrl || null,
         status: certificate.status,
+        signingKeyId: certificate.signingKeyId || null,
+        signingProvider: certificate.signingProvider || "institution",
+        signatureAlgorithm: certificate.signatureAlgorithm || "RSA-SHA256",
+        signedAt: certificate.signedAt ? certificate.signedAt.toISOString() : (certificate.createdAt ? certificate.createdAt.toISOString() : null),
         expiresAt: certificate.expiresAt ? certificate.expiresAt.toISOString() : null,
         revokedAt: certificate.revokedAt ? certificate.revokedAt.toISOString() : null,
         revocationReason: certificate.revocationReason || "",
@@ -379,7 +467,6 @@ exports.sendEmails = async (req, res) => {
       return res.status(400).json({ success: false, error: "Invalid eventId" });
     }
 
-    // Ensure the event belongs to the caller's workspace before sending.
     const event = await Event.findOne({ _id: eventId, workspaceId: req.workspaceId });
     if (!event) {
       return res.status(404).json({ success: false, error: "Event not found or unauthorized" });
@@ -406,7 +493,6 @@ exports.getStats = async (req, res) => {
     const certFilter = { workspaceId };
     const eventFilter = { workspaceId };
 
-    // Run all aggregate counts in parallel, scoped to the organization.
     const [
       totalCertificates,
       generated,
@@ -433,12 +519,10 @@ exports.getStats = async (req, res) => {
 
     const totalUsers = uniqueRecipients.length;
 
-    // Verification rate = generated / total
     const verificationRate = totalCertificates > 0
       ? Math.round((generated / totalCertificates) * 100)
       : 0;
 
-    // Fetch cert counts for recent events in parallel
     const recentWithCounts = await Promise.all(
       recentEvents.map(async (event) => {
         const [certCount, genCount] = await Promise.all([
@@ -458,7 +542,6 @@ exports.getStats = async (req, res) => {
       })
     );
 
-    // Top recipients (scoped to the organization)
     const topRecipients = await Certificate.aggregate([
       { $match: { workspaceId: new mongoose.Types.ObjectId(workspaceId) } },
       { $group: { _id: "$userId", count: { $sum: 1 } } },
@@ -520,13 +603,11 @@ exports.retryCertificate = async (req, res) => {
       return res.status(404).json({ success: false, error: "Certificate not found or unauthorized" });
     }
 
-    // Reset status and retry parameters
     certificate.status = "pending";
     certificate.errorLog = "";
     certificate.attemptsCount = 0;
     await certificate.save();
 
-    // Trigger queue generation for the event
     const certQueue = getCertificateQueue();
     if (certQueue) {
       try {
@@ -571,13 +652,10 @@ exports.getVerificationAnalytics = async (req, res) => {
     const workspaceId = req.workspaceId;
     const VerificationAudit = require("../models/VerificationAudit");
 
-    // Scoped match stage
     const matchStage = { $match: { workspaceId: new mongoose.Types.ObjectId(workspaceId) } };
 
-    // 1. Total count
     const totalVerifications = await VerificationAudit.countDocuments({ workspaceId });
 
-    // 2. Group by Referral Source
     const referralGroup = await VerificationAudit.aggregate([
       matchStage,
       { $group: { _id: "$referralSource", count: { $sum: 1 } } }
@@ -589,7 +667,6 @@ exports.getVerificationAnalytics = async (req, res) => {
       }
     });
 
-    // 3. Group by Device Type
     const deviceGroup = await VerificationAudit.aggregate([
       matchStage,
       { $group: { _id: "$deviceType", count: { $sum: 1 } } }
@@ -601,7 +678,6 @@ exports.getVerificationAnalytics = async (req, res) => {
       }
     });
 
-    // 4. Group by OS
     const osGroup = await VerificationAudit.aggregate([
       matchStage,
       { $group: { _id: "$os", count: { $sum: 1 } } },
@@ -609,7 +685,6 @@ exports.getVerificationAnalytics = async (req, res) => {
       { $limit: 5 }
     ]);
 
-    // 5. Timeline grouping (last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
@@ -630,7 +705,6 @@ exports.getVerificationAnalytics = async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Overlay Javascript 30-day array to ensure 0-values are represented
     const timelineMap = new Map();
     timelineGroup.forEach((t) => timelineMap.set(t._id, t.count));
 
@@ -648,7 +722,6 @@ exports.getVerificationAnalytics = async (req, res) => {
       });
     }
 
-    // 6. Recent verifications list populated with recipient/event names
     const recentAudits = await VerificationAudit.find({ workspaceId })
       .populate({
         path: "certificateId",

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
-import { api, BACKEND_URL, TemplateListItem } from "@/lib/api";
+import { api, BACKEND_URL, TemplateListItem, getAssetUrl } from "@/lib/api";
 import { pageVariants, fadeUp, cardTap } from "@/lib/animations";
 
 interface Recipient {
@@ -188,7 +188,7 @@ export default function CreateEventPage({ initialTemplate }: { initialTemplate?:
                       {/* Preview */}
                       <div className="bg-[var(--color-surface-alt)] rounded-xl h-36 flex flex-col items-center justify-center relative overflow-hidden">
                         {t.backgroundType === "image" ? (
-                          <img src={`${BACKEND_URL}${t.backgroundUrl}`} alt={t.name} className="w-full h-full object-cover" />
+                          <img src={getAssetUrl(t.backgroundUrl)} alt={t.name} className="w-full h-full object-cover" />
                         ) : (
                           <div className="text-[var(--color-muted)] text-xs font-semibold">PDF Template</div>
                         )}

@@ -11,9 +11,13 @@ export default function ProtectedRoute({ children }: { children: React.ReactNode
   const router = useRouter();
   const pathname = usePathname();
 
-  const isPublicRoute = pathname?.startsWith("/login") || 
+  const isPublicRoute = pathname === "/" ||
+                        pathname?.startsWith("/login") || 
                         pathname?.startsWith("/signup") || 
                         pathname?.startsWith("/recipient") || 
+                        pathname?.startsWith("/compliance") ||
+                        pathname?.startsWith("/integrations") ||
+                        pathname?.startsWith("/templates") ||
                         pathname?.startsWith("/verify");
 
   useEffect(() => {

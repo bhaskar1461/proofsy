@@ -1,0 +1,7 @@
+name,email
+"John","evil@attacker.com"
+Malicious,legit@test.io
+Name"","extra_column","more",structure1@evil.com
+Line1
+name,email
+Evil,evil@evil.com,newrow@evil.com

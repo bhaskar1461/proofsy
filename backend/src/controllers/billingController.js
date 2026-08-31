@@ -1,12 +1,13 @@
 const Transaction = require("../models/Transaction");
 const Workspace = require("../models/Workspace");
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 
-const PHONEPE_MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || "MERCHANTUAT";
-const PHONEPE_SALT_KEY = process.env.PHONEPE_SALT_KEY || "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399";
+const isProd = process.env.NODE_ENV === "production";
+const PHONEPE_MERCHANT_ID = process.env.PHONEPE_MERCHANT_ID || (isProd ? "" : "MERCHANTUAT");
+const PHONEPE_SALT_KEY = process.env.PHONEPE_SALT_KEY || (isProd ? "" : "099eb0cd-02cf-4e2a-8aca-3e6c6aff0399");
 const PHONEPE_SALT_INDEX = process.env.PHONEPE_SALT_INDEX || "1";
-const PHONEPE_API_URL = process.env.PHONEPE_API_URL || "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay";
+const PHONEPE_API_URL = process.env.PHONEPE_API_URL || (isProd ? "https://api.phonepe.com/apis/hermes/pg/v1/pay" : "https://api-preprod.phonepe.com/apis/pg-sandbox/pg/v1/pay");
 
 // Plan details
 const PLANS = {
@@ -135,33 +136,37 @@ exports.paymentCallback = async (req, res) => {
     const { success, code, data } = payload;
     const { merchantTransactionId, transactionId } = data;
 
-    const transaction = await Transaction.findOne({ merchantTransactionId });
-    if (!transaction) {
+    const existingTxn = await Transaction.findOne({ merchantTransactionId });
+    if (!existingTxn) {
       return res.status(404).json({ success: false, error: "Transaction matching callback not found" });
     }
 
-    // Only update pending transactions
-    if (transaction.status === "created") {
-      if (success && code === "PAYMENT_SUCCESS") {
-        transaction.status = "paid";
-        transaction.phonepeTransactionId = transactionId;
-        await transaction.save();
+    // Atomically transition only if status is still "created" (prevents duplicate credit race conditions)
+    if (success && code === "PAYMENT_SUCCESS") {
+      const updatedTxn = await Transaction.findOneAndUpdate(
+        { merchantTransactionId, status: "created" },
+        { $set: { status: "paid", phonepeTransactionId: transactionId } },
+        { returnDocument: "after" }
+      );
 
-        // Increment Workspace Credits
-        const workspace = await Workspace.findById(transaction.workspaceId);
+      // Only increment credits if this invocation was the one that transitioned from "created" to "paid"
+      if (updatedTxn) {
+        const workspace = await Workspace.findById(updatedTxn.workspaceId);
         if (workspace) {
-          workspace.plan = transaction.plan;
-          workspace.credits += transaction.creditsAdded;
-          if (transaction.plan === "annual-pass") {
+          workspace.plan = updatedTxn.plan;
+          workspace.credits += updatedTxn.creditsAdded;
+          if (updatedTxn.plan === "annual-pass") {
             workspace.planExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // 1 year expiry
           }
           await workspace.save();
-          console.log(`[Billing] Workspace ${workspace.name} credits updated. Added ${transaction.creditsAdded}`);
+          console.log(`[Billing] Workspace ${workspace.name} credits updated. Added ${updatedTxn.creditsAdded}`);
         }
-      } else {
-        transaction.status = "failed";
-        await transaction.save();
       }
+    } else {
+      await Transaction.findOneAndUpdate(
+        { merchantTransactionId, status: "created" },
+        { $set: { status: "failed" } }
+      );
     }
 
     return res.json({ success: true, message: "Callback processed successfully" });
@@ -175,15 +180,20 @@ exports.paymentCallback = async (req, res) => {
 exports.getTransactionStatus = async (req, res) => {
   try {
     const { txnId } = req.params;
-    const transaction = await Transaction.findOne({ merchantTransactionId: txnId });
-
-    if (!transaction) {
-      return res.status(404).json({ success: false, error: "Transaction not found" });
+    const filter = { merchantTransactionId: txnId };
+    if (req.workspaceId) {
+      filter.workspaceId = req.workspaceId;
     }
 
-    // Simulating successful callback in development/UAT environment if mock checkout is passed
-    const isSandboxOrUAT = process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test" || PHONEPE_MERCHANT_ID === "MERCHANTUAT" || process.env.ALLOW_MOCK_PAYMENTS === "true";
-    if (req.query.mock === "true" && transaction.status === "created" && isSandboxOrUAT) {
+    const transaction = await Transaction.findOne(filter);
+
+    if (!transaction) {
+      return res.status(404).json({ success: false, error: "Transaction not found or unauthorized" });
+    }
+
+    // Simulating successful callback in development/UAT environment if mock checkout is enabled
+    const allowMock = (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") && (process.env.ALLOW_MOCK_PAYMENTS === "true" || process.env.NODE_ENV === "test");
+    if (req.query.mock === "true" && transaction.status === "created" && allowMock) {
       console.log(`[Billing] Simulating mock successful payment for transaction ${txnId}`);
       transaction.status = "paid";
       transaction.phonepeTransactionId = `MOCK-${Date.now()}`;

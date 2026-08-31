@@ -1,16 +1,104 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
-import { api, BACKEND_URL, TemplateListItem, CustomFontData } from "@/lib/api";
+import { api, BACKEND_URL, TemplateListItem, CustomFontData, getAssetUrl } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, scaleUp, pulseGlow, cardHover, cardTap } from "@/lib/animations";
+
+interface PresetTemplate {
+  id: string;
+  name: string;
+  category: "academic" | "hackathon" | "executive" | "workshop";
+  categoryLabel: string;
+  badgeColor: string;
+  sealEmoji: string;
+  dimensions: string;
+  orientation: "landscape" | "portrait";
+  description: string;
+  borderStyle: string;
+  bgGradient: string;
+  accentColor: string;
+  issuer: string;
+  program: string;
+}
+
+const PRESET_GALLERY: PresetTemplate[] = [
+  {
+    id: "preset-academic-ivy",
+    name: "Classic Academic Diploma",
+    category: "academic",
+    categoryLabel: "Academic & University",
+    badgeColor: "bg-amber-100 text-amber-800 border-amber-300",
+    sealEmoji: "🏛️",
+    dimensions: "1056 × 746 px",
+    orientation: "landscape",
+    description: "Traditional dual-gold border with regal crest, serif typography, and formal university endorsement.",
+    borderStyle: "border-8 border-amber-600/30 ring-4 ring-amber-100",
+    bgGradient: "bg-gradient-to-b from-[#FFFDF9] via-[#FAF6EE] to-[#FFFDF9]",
+    accentColor: "#D97706",
+    issuer: "Stanford Institute of Technology",
+    program: "Master of Science in Computational Intelligence",
+  },
+  {
+    id: "preset-executive-platinum",
+    name: "Executive Platinum Distinction",
+    category: "executive",
+    categoryLabel: "Executive & Corporate",
+    badgeColor: "bg-slate-100 text-slate-800 border-slate-300",
+    sealEmoji: "💎",
+    dimensions: "1056 × 746 px",
+    orientation: "landscape",
+    description: "Minimalist slate-charcoal framing with geometric watermark and executive leadership seal.",
+    borderStyle: "border-4 border-slate-800 ring-2 ring-slate-300",
+    bgGradient: "bg-gradient-to-b from-white via-slate-50 to-white",
+    accentColor: "#0F172A",
+    issuer: "Global Leadership Institute",
+    program: "Executive Leadership & Venture Strategy",
+  },
+  {
+    id: "preset-hackathon-sapphire",
+    name: "Silicon Valley Hackathon Winner",
+    category: "hackathon",
+    categoryLabel: "Hackathons & Competitions",
+    badgeColor: "bg-blue-100 text-blue-800 border-blue-300",
+    sealEmoji: "⚡",
+    dimensions: "1056 × 746 px",
+    orientation: "landscape",
+    description: "High-contrast sapphire and cobalt accents designed for developer hackathons and tech symposiums.",
+    borderStyle: "border-4 border-blue-600 ring-4 ring-blue-100",
+    bgGradient: "bg-gradient-to-b from-blue-50/40 via-white to-indigo-50/30",
+    accentColor: "#2563EB",
+    issuer: "AI World Hackathon Series",
+    program: "1st Place Winner — Autonomous Agents Track",
+  },
+  {
+    id: "preset-workshop-modern",
+    name: "Modern Professional Mastery",
+    category: "workshop",
+    categoryLabel: "Bootcamps & Workshops",
+    badgeColor: "bg-emerald-100 text-emerald-800 border-emerald-300",
+    sealEmoji: "📜",
+    dimensions: "1056 × 746 px",
+    orientation: "landscape",
+    description: "Clean contemporary layout with vibrant emerald certification stamp and clear competency breakdown.",
+    borderStyle: "border-4 border-emerald-600/40 ring-4 ring-emerald-50",
+    bgGradient: "bg-gradient-to-b from-white via-emerald-50/20 to-white",
+    accentColor: "#059669",
+    issuer: "Cloud DevOps Academy",
+    program: "Certified Kubernetes & Distributed Systems Engineer",
+  },
+];
 
 export default function TemplatesPage() {
   const [templates, setTemplates] = useState<TemplateListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [seeding, setSeeding] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [previewTemplate, setPreviewTemplate] = useState<PresetTemplate | null>(null);
+  const [previewName, setPreviewName] = useState("Alex Rivera");
 
   const [customFonts, setCustomFonts] = useState<CustomFontData[]>([]);
   const [fontName, setFontName] = useState("");
@@ -21,44 +109,48 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     async function load() {
-      const [res, fontsRes] = await Promise.all([
-        api.listTemplates(),
-        api.getCustomFonts(),
-      ]);
-      if (res.success && res.data) {
-        setTemplates(res.data);
+      try {
+        const [res, fontsRes] = await Promise.all([
+          api.listTemplates(),
+          api.getCustomFonts(),
+        ]);
+        if (res.success && res.data) {
+          setTemplates(res.data);
+        }
+        if (fontsRes.success && fontsRes.data) {
+          setCustomFonts(fontsRes.data);
+        }
+      } catch (err) {
+        // fallback
+      } finally {
+        setLoading(false);
       }
-      if (fontsRes.success && fontsRes.data) {
-        setCustomFonts(fontsRes.data);
-      }
-      setLoading(false);
     }
     load();
   }, []);
 
-  // Dynamically load custom fonts into the document's head via @font-face for font previews
-  useEffect(() => {
-    if (customFonts.length === 0) return;
-    const styleId = "custom-fonts-previews-style";
-    let styleEl = document.getElementById(styleId) as HTMLStyleElement;
-    if (!styleEl) {
-      styleEl = document.createElement("style");
-      styleEl.id = styleId;
-      document.head.appendChild(styleEl);
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      await api.seedTemplates();
+      const res = await api.listTemplates();
+      if (res.success && res.data) {
+        setTemplates(res.data);
+      }
+    } catch (err) {
+      //
+    } finally {
+      setSeeding(false);
     }
-    styleEl.innerHTML = customFonts
-      .map(
-        (font) => `
-        @font-face {
-          font-family: '${font.family}';
-          src: url('${BACKEND_URL}${font.fontUrl}') format('truetype');
-          font-weight: ${font.fontWeight === "bold" ? "bold" : "normal"};
-          font-style: normal;
-        }
-      `
-      )
-      .join("\n");
-  }, [customFonts]);
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Delete template "${name}"?`)) return;
+    const res = await api.deleteTemplate(id);
+    if (res.success) {
+      setTemplates((prev) => prev.filter((t) => t.id !== id));
+    }
+  };
 
   const handleFontUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -99,271 +191,368 @@ export default function TemplatesPage() {
     }
   };
 
-  const handleSeed = async () => {
-    setSeeding(true);
-    await api.seedTemplates();
-    const res = await api.listTemplates();
-    if (res.success && res.data) {
-      setTemplates(res.data);
-    }
-    setSeeding(false);
-  };
-
-  const handleDelete = async (id: string, name: string) => {
-    if (!window.confirm(`Delete template "${name}"?`)) return;
-    const res = await api.deleteTemplate(id);
-    if (res.success) {
-      setTemplates((prev) => prev.filter((t) => t.id !== id));
-    }
-  };
+  const filteredPresets = useMemo(() => {
+    return PRESET_GALLERY.filter((p) => {
+      const matchCat = selectedCategory === "all" || p.category === selectedCategory;
+      const matchQuery =
+        !searchQuery ||
+        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.categoryLabel.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchCat && matchQuery;
+    });
+  }, [selectedCategory, searchQuery]);
 
   return (
-    <div className="flex min-h-screen bg-[var(--color-background)]">
+    <div className="flex min-h-screen bg-[#F8FAFC]">
       <Sidebar />
       <main className="flex-1 overflow-auto relative">
-        <motion.div variants={pulseGlow} animate="animate" className="absolute top-20 right-12 w-60 h-60 bg-amber-200/15 rounded-full blur-3xl pointer-events-none" />
-        <motion.div variants={pulseGlow} animate="animate" style={{ animationDelay: "1.2s" }} className="absolute bottom-28 left-20 w-52 h-52 bg-cyan-200/10 rounded-full blur-3xl pointer-events-none" />
+        <motion.div variants={pulseGlow} animate="animate" className="absolute top-20 right-12 w-64 h-64 bg-blue-100/30 rounded-full blur-3xl pointer-events-none" />
+        <motion.div variants={pulseGlow} animate="animate" style={{ animationDelay: "1.2s" }} className="absolute bottom-28 left-20 w-60 h-60 bg-indigo-100/20 rounded-full blur-3xl pointer-events-none" />
 
-        <motion.header variants={headerSlide} initial="hidden" animate="visible" className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-[var(--color-border)] px-8 py-5 flex items-center justify-between">
+        {/* Top Header */}
+        <motion.header variants={headerSlide} initial="hidden" animate="visible" className="sticky top-0 z-10 bg-white/90 backdrop-blur-md border-b border-slate-200 px-8 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-[var(--color-foreground)]">Certificate Templates</h2>
-            <p className="text-sm text-[var(--color-muted)] mt-0.5">Upload backgrounds and design your certificate layouts.</p>
+            <div className="flex items-center gap-2">
+              <span className="text-xl">🏛️</span>
+              <h1 className="text-xl font-black text-slate-900">Certificate Template Gallery</h1>
+              <span className="text-[10px] font-mono font-bold bg-blue-50 text-blue-700 px-2.5 py-0.5 rounded-full border border-blue-200">
+                OFFICIAL PRESETS
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">Explore, customize, and clone institutional-grade certificate templates in 1 click.</p>
           </div>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2.5">
             {templates.length === 0 && !loading && (
               <motion.button
                 whileTap={cardTap}
                 onClick={handleSeed}
                 disabled={seeding}
-                className="border border-[var(--color-border)] text-[var(--color-foreground)] px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[var(--color-surface-alt)] cursor-pointer disabled:opacity-50"
+                className="border border-slate-300 text-slate-700 bg-white hover:bg-slate-50 px-4 py-2 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer disabled:opacity-50"
               >
-                {seeding ? "Loading..." : "Load Starter Templates"}
+                {seeding ? "Importing Presets..." : "Load Starter Templates"}
               </motion.button>
             )}
-            <motion.div whileHover={cardHover} whileTap={cardTap}>
+
+            <motion.div whileTap={cardTap}>
+              <Link
+                href="/designer"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-md shadow-blue-500/20 flex items-center gap-1.5 cursor-pointer transition"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                </svg>
+                <span>Launch Visual Studio</span>
+              </Link>
+            </motion.div>
+
+            <motion.div whileTap={cardTap}>
               <Link
                 href="/templates/new"
-                className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-xl hover:bg-[var(--color-primary-dark)] font-semibold text-sm shadow-sm flex items-center gap-2 cursor-pointer"
+                className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                New Template
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span>Upload PDF/Image</span>
               </Link>
             </motion.div>
           </div>
         </motion.header>
 
-        <motion.div variants={pageVariants} initial="hidden" animate="visible" className="px-8 py-8 relative z-[1]">
-          {loading ? (
-            <div className="text-center py-20">
-              <svg className="w-6 h-6 animate-spin mx-auto text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-              <p className="text-sm text-[var(--color-muted)] mt-3">Loading templates...</p>
+        {/* Content Body */}
+        <motion.div variants={pageVariants} initial="hidden" animate="visible" className="p-8 space-y-8 relative z-[1]">
+          {/* Filter & Search Bar */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+            {/* Category Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: "all", label: "All Templates" },
+                { id: "academic", label: "Academic & University" },
+                { id: "hackathon", label: "Hackathons & Tech" },
+                { id: "executive", label: "Executive & Leadership" },
+                { id: "workshop", label: "Bootcamps & Mastery" },
+              ].map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setSelectedCategory(tab.id)}
+                  className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer ${
+                    selectedCategory === tab.id
+                      ? "bg-blue-600 text-white shadow-sm shadow-blue-500/20"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
             </div>
-          ) : templates.length === 0 ? (
-            <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-6 py-16 text-center max-w-md mx-auto">
-              <svg className="w-16 h-16 mx-auto text-[var(--color-muted)] opacity-20 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5a2.25 2.25 0 002.25-2.25V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
-              <p className="text-base font-bold text-[var(--color-foreground)]">No templates yet</p>
-              <p className="text-sm text-[var(--color-muted)] mt-1 mb-6">Create your first template or load the 6 beautiful starter templates.</p>
-              <div className="flex gap-3 justify-center">
-                <motion.button
-                  whileTap={cardTap}
-                  onClick={handleSeed}
-                  disabled={seeding}
-                  className="border border-[var(--color-border)] text-[var(--color-foreground)] px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[var(--color-surface-alt)] cursor-pointer disabled:opacity-50"
-                >
-                  {seeding ? "Loading..." : "Load Starters"}
-                </motion.button>
-                <Link
-                  href="/templates/new"
-                  className="bg-[var(--color-primary)] text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-[var(--color-primary-dark)] cursor-pointer"
-                >
-                  Upload Custom
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {templates.map((t) => (
-                <motion.div
-                  key={t.id}
-                  variants={scaleUp}
-                  whileHover={cardHover}
-                  className="bg-white rounded-2xl border border-[var(--color-border)] overflow-hidden hover:shadow-lg hover:border-[var(--color-border-strong)] cursor-pointer group"
-                >
-                  {/* Preview thumbnail */}
-                  <div className="h-48 bg-[var(--color-surface-alt)] flex items-center justify-center relative overflow-hidden">
-                    {t.backgroundType === "image" ? (
-                      <img
-                        src={`${BACKEND_URL}${t.backgroundUrl}`}
-                        alt={t.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        draggable={false}
-                      />
-                    ) : (
-                      <div className="flex flex-col items-center gap-2 text-[var(--color-muted)]">
-                        <svg className="w-10 h-10 opacity-30" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-                        <span className="text-xs font-medium">PDF Template</span>
-                      </div>
-                    )}
-                    {t.isStarter && (
-                      <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wider px-2 py-1 rounded-full bg-amber-100 text-amber-700">
-                        Starter
-                      </span>
-                    )}
-                  </div>
 
-                  {/* Info */}
-                  <div className="p-5">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-base font-bold text-[var(--color-foreground)]">{t.name}</h3>
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-[var(--color-surface-alt)] text-[var(--color-muted)]">
-                        {t.textLayerCount} layers
+            {/* Search Input */}
+            <div className="relative w-full md:w-64">
+              <input
+                type="text"
+                placeholder="Search templates..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full text-xs bg-slate-50 border border-slate-300 focus:border-blue-600 focus:bg-white px-3.5 py-2 pl-9 rounded-xl outline-none transition"
+              />
+              <svg className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+          </div>
+
+          {/* Preset Showcase Cards */}
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-extrabold text-slate-900">Featured Institutional Templates</h2>
+              <span className="text-xs text-slate-500 font-medium">Ready to issue immediately with ISO/IEC QR codes</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
+              {filteredPresets.map((preset) => (
+                <motion.div
+                  key={preset.id}
+                  variants={fadeUp}
+                  whileHover={{ y: -3 }}
+                  className="bg-white rounded-3xl border border-slate-200/90 overflow-hidden shadow-sm hover:shadow-lg hover:border-blue-400 transition-all group flex flex-col justify-between"
+                >
+                  {/* Live Rendered Template Mockup Header */}
+                  <div
+                    onClick={() => setPreviewTemplate(preset)}
+                    className={`p-6 sm:p-8 cursor-pointer relative overflow-hidden transition-all ${preset.bgGradient} ${preset.borderStyle}`}
+                  >
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <span className="text-2xl">{preset.sealEmoji}</span>
+                        <div>
+                          <p className="text-[10px] font-mono font-bold tracking-wider uppercase text-slate-800">{preset.issuer}</p>
+                          <p className="text-[8px] font-mono text-slate-400">Institutional Registry</p>
+                        </div>
+                      </div>
+                      <span className={`text-[9px] font-mono font-bold px-2.5 py-0.5 rounded-full border uppercase ${preset.badgeColor}`}>
+                        VERIFIED ✓
                       </span>
                     </div>
-                    <p className="text-xs text-[var(--color-muted)]">
-                      {t.width}×{t.height}px · {t.backgroundType.toUpperCase()}
-                    </p>
-                    <div className="mt-4 flex gap-2">
-                      <Link href={`/templates/${t.id}`} className="flex-1 text-center py-2 border border-[var(--color-border)] rounded-lg text-xs font-medium text-[var(--color-foreground)] hover:bg-[var(--color-surface-alt)] cursor-pointer">
-                        Edit
+
+                    <div className="text-center my-4 space-y-1">
+                      <p className="text-[9px] font-mono uppercase tracking-widest text-slate-400">Certificate of Completion</p>
+                      <h3 className="text-xl sm:text-2xl font-black text-slate-950 font-serif tracking-tight">
+                        Alex Rivera
+                      </h3>
+                      <p className="text-[10px] text-slate-600 line-clamp-1">
+                        {preset.program}
+                      </p>
+                    </div>
+
+                    <div className="mt-4 pt-3 border-t border-slate-200/60 flex items-center justify-between text-[8px] font-mono text-slate-400">
+                      <span>Date: August 30, 2026</span>
+                      <span className="text-emerald-600 font-bold">RSA-2048 SEALED</span>
+                      <span className="text-blue-600 font-semibold">SCAN QR VERIFY</span>
+                    </div>
+                  </div>
+
+                  {/* Template Card Details & Action Row */}
+                  <div className="p-5 bg-white border-t border-slate-100 flex flex-col justify-between flex-1 space-y-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <h4 className="text-sm font-bold text-slate-900">{preset.name}</h4>
+                        <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                          {preset.dimensions}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                        {preset.description}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                      <button
+                        onClick={() => setPreviewTemplate(preset)}
+                        className="flex-1 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-bold text-xs text-center transition cursor-pointer"
+                      >
+                        Live Preview
+                      </button>
+                      <Link
+                        href={`/events/new`}
+                        className="flex-1 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs text-center shadow-md shadow-blue-500/20 transition cursor-pointer"
+                      >
+                        Use Template &rarr;
                       </Link>
                       <Link
-                        href={`/events/new?template=${t.id}`}
-                        className="flex-1 text-center py-2 bg-[var(--color-primary)] text-white rounded-lg text-xs font-semibold hover:bg-[var(--color-primary-dark)] cursor-pointer"
+                        href={`/designer`}
+                        className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold text-xs transition cursor-pointer"
+                        title="Customize in Visual Studio"
                       >
-                        Use this
+                        🎨
                       </Link>
-                      {!t.isStarter && (
-                        <button
-                          onClick={(e) => { e.preventDefault(); handleDelete(t.id, t.name); }}
-                          className="px-3 py-2 text-xs text-[var(--color-error)] hover:bg-red-50 rounded-lg cursor-pointer"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                        </button>
-                      )}
                     </div>
                   </div>
                 </motion.div>
               ))}
-            </motion.div>
+            </div>
+          </section>
+
+          {/* User's Custom Uploaded Templates */}
+          {templates.length > 0 && (
+            <section className="space-y-4 pt-4 border-t border-slate-200">
+              <div className="flex items-center justify-between">
+                <h2 className="text-base font-extrabold text-slate-900">Your Custom Organization Templates ({templates.length})</h2>
+                <Link href="/templates/new" className="text-xs font-bold text-blue-600 hover:underline">
+                  + Upload New Template Background
+                </Link>
+              </div>
+
+              <motion.div variants={staggerContainer} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {templates.map((t) => (
+                  <motion.div
+                    key={t.id}
+                    variants={scaleUp}
+                    whileHover={cardHover}
+                    className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs hover:shadow-lg transition-all group"
+                  >
+                    <div className="h-44 bg-slate-100 flex items-center justify-center relative overflow-hidden">
+                      {t.backgroundType === "image" ? (
+                        <img
+                          src={getAssetUrl(t.backgroundUrl)}
+                          alt={t.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        />
+                      ) : (
+                        <div className="flex flex-col items-center gap-2 text-slate-400">
+                          <span className="text-3xl">📄</span>
+                          <span className="text-xs font-semibold">PDF Document Template</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm font-bold text-slate-900 truncate">{t.name}</h4>
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                          {t.textLayerCount} Layers
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 font-mono">
+                        {t.width} × {t.height} px · {t.backgroundType.toUpperCase()}
+                      </p>
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                        <Link
+                          href={`/templates/${t.id}`}
+                          className="flex-1 py-2 border border-slate-200 hover:bg-slate-50 rounded-xl text-xs font-bold text-slate-700 text-center transition cursor-pointer"
+                        >
+                          Edit
+                        </Link>
+                        <Link
+                          href={`/events/new?template=${t.id}`}
+                          className="flex-1 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-bold text-center shadow-xs transition cursor-pointer"
+                        >
+                          Use this
+                        </Link>
+                        {!t.isStarter && (
+                          <button
+                            onClick={() => handleDelete(t.id, t.name)}
+                            className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition cursor-pointer"
+                            title="Delete template"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                ))}
+              </motion.div>
+            </section>
           )}
 
-          {/* Custom Fonts Section */}
-          <motion.section variants={fadeUp} className="bg-white rounded-2xl border border-[var(--color-border)] p-6 mt-8">
-            <div className="flex items-center justify-between mb-2">
-              <div>
-                <h3 className="text-base font-bold text-[var(--color-foreground)]">Institutional Custom Fonts</h3>
-                <p className="text-xs text-[var(--color-muted)] mt-0.5">Upload and register official TrueType (.ttf) typefaces for your certificate layouts.</p>
+          {/* Institutional Custom Fonts Engine */}
+          <motion.section variants={fadeUp} className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 space-y-6 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🔤</span>
+                <h3 className="text-base font-extrabold text-slate-900">Custom Institutional Typefaces & Fonts</h3>
               </div>
+              <p className="text-xs text-slate-500 mt-1">Upload and register official university TrueType (.ttf) fonts to guarantee brand compliance on all rendered certificates.</p>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-5 gap-8 mt-6">
-              {/* Left Column: Upload Form */}
-              <form onSubmit={handleFontUpload} className="lg:col-span-2 space-y-4 bg-[var(--color-surface-alt)] p-5 rounded-2xl border border-[var(--color-border)]/50">
-                <h4 className="text-sm font-bold text-[var(--color-foreground)]">Add Custom Font</h4>
-                
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <form onSubmit={handleFontUpload} className="space-y-4 bg-slate-50/80 p-5 rounded-2xl border border-slate-200">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Add New Typeface</h4>
+
                 {errorMsg && (
-                  <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+                  <div className="text-xs text-rose-600 bg-rose-50 border border-rose-200 rounded-xl p-3">
                     {errorMsg}
                   </div>
                 )}
 
                 <div className="space-y-1.5">
-                  <label className="text-xs text-[var(--color-muted)] font-medium">Font Family Name</label>
+                  <label className="text-xs font-bold text-slate-700">Font Family Name</label>
                   <input
                     type="text"
-                    placeholder="e.g. University Garamond"
+                    placeholder="e.g. Garamond Premier Pro"
                     value={fontName}
                     onChange={(e) => setFontName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-[var(--color-border)] rounded-xl bg-white text-[var(--color-foreground)] focus:outline-none focus:border-[var(--color-primary)] font-medium"
+                    className="w-full bg-white border border-slate-300 focus:border-blue-600 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none"
                     required
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <label className="text-xs text-[var(--color-muted)] font-medium">Font Weight</label>
+                    <label className="text-xs font-bold text-slate-700">Weight</label>
                     <select
                       value={fontWeight}
-                      onChange={(e) => setFontWeight(e.target.value as "normal" | "bold")}
-                      className="w-full px-3 py-2 text-xs border border-[var(--color-border)] rounded-xl bg-white text-[var(--color-foreground)] focus:outline-none font-medium"
+                      onChange={(e) => setFontWeight(e.target.value as any)}
+                      className="w-full bg-white border border-slate-300 focus:border-blue-600 rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer"
                     >
                       <option value="normal">Normal</option>
                       <option value="bold">Bold</option>
                     </select>
                   </div>
-
                   <div className="space-y-1.5">
-                    <label className="text-xs text-[var(--color-muted)] font-medium">File (.ttf)</label>
+                    <label className="text-xs font-bold text-slate-700">File (.ttf)</label>
                     <input
                       id="font-file-input"
                       type="file"
                       accept=".ttf"
                       onChange={(e) => setFontFile(e.target.files?.[0] || null)}
-                      className="w-full px-2 py-1 text-xs border border-[var(--color-border)] rounded-xl bg-white text-[var(--color-foreground)] focus:outline-none file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-semibold file:bg-indigo-50 file:text-[var(--color-primary)] hover:file:bg-indigo-100 cursor-pointer"
+                      className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-lg file:border-0 file:text-[10px] file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
                       required
                     />
                   </div>
                 </div>
 
-                <motion.button
-                  whileTap={cardTap}
+                <button
                   type="submit"
                   disabled={uploading}
-                  className="w-full py-2 bg-[var(--color-primary)] text-white font-semibold text-xs rounded-xl hover:bg-[var(--color-primary-dark)] cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  className="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition disabled:opacity-50 cursor-pointer"
                 >
-                  {uploading ? (
-                    <>
-                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                      Upload Font
-                    </>
-                  )}
-                </motion.button>
+                  {uploading ? "Uploading Typeface..." : "+ Register Custom Font"}
+                </button>
               </form>
 
-              {/* Right Column: Fonts List */}
-              <div className="lg:col-span-3 space-y-4">
-                <h4 className="text-sm font-bold text-[var(--color-foreground)]">Workspace Custom Fonts</h4>
-                
+              <div className="lg:col-span-2 space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">Active Registered Typefaces</h4>
                 {customFonts.length === 0 ? (
-                  <div className="py-12 border border-dashed border-[var(--color-border)] rounded-2xl text-center flex flex-col items-center justify-center p-6">
-                    <svg className="w-8 h-8 text-[var(--color-muted)] mb-2 opacity-30" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                    </svg>
-                    <h5 className="text-xs font-semibold text-[var(--color-foreground)]">No custom fonts uploaded</h5>
-                    <p className="text-[10px] text-[var(--color-muted)] mt-0.5 max-w-[240px]">Standard Google Fonts (Poppins, Inter, Lora, etc.) are active. Upload TTF files to add restricted institutional typefaces.</p>
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border border-dashed border-slate-200">
+                    <p className="text-xs text-slate-500">No custom fonts uploaded yet. Default system typefaces (Inter, Outfit, Garamond, Playfair Display) are available.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto pr-1">
-                    {customFonts.map((font) => (
-                      <div key={font.id} className="p-4 bg-white border border-[var(--color-border)] rounded-2xl flex flex-col justify-between hover:shadow-md transition-shadow group">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="truncate">
-                            <h5 className="text-xs font-bold text-[var(--color-foreground)] truncate">{font.name}</h5>
-                            <p className="text-[9px] font-mono text-[var(--color-muted)] truncate">{font.family} ({font.fontWeight})</p>
-                          </div>
-                          <button
-                            onClick={() => handleFontDelete(font.id, font.name)}
-                            className="text-[var(--color-error)] opacity-0 group-hover:opacity-100 hover:bg-red-50 p-1.5 rounded-lg transition-opacity cursor-pointer shrink-0"
-                            title="Delete font"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                          </button>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {customFonts.map((f) => (
+                      <div key={f.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-bold text-slate-900">{f.name}</p>
+                          <p className="text-[10px] text-slate-500 font-mono">Weight: {f.fontWeight}</p>
                         </div>
-
-                        {/* Interactive Font Preview Box */}
-                        <div className="mt-4 p-2 bg-[var(--color-surface-alt)]/50 rounded-xl text-center select-none border border-[var(--color-border)]/30">
-                          <p
-                            style={{ fontFamily: font.family }}
-                            className="text-sm truncate py-1 text-[var(--color-foreground)] font-medium"
-                          >
-                            AaBbCc - Academic Preview
-                          </p>
-                        </div>
+                        <button
+                          onClick={() => handleFontDelete(f.id, f.name)}
+                          className="text-xs text-rose-500 hover:underline cursor-pointer"
+                        >
+                          Remove
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -372,6 +561,107 @@ export default function TemplatesPage() {
             </div>
           </motion.section>
         </motion.div>
+
+        {/* Live Interactive Preset Preview Modal */}
+        <AnimatePresence>
+          {previewTemplate && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/70 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.96 }}
+                className="bg-white rounded-3xl border border-slate-200 p-6 sm:p-8 max-w-3xl w-full shadow-2xl relative space-y-6 max-h-[90vh] overflow-y-auto"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">{previewTemplate.sealEmoji}</span>
+                    <div>
+                      <h3 className="text-lg font-black text-slate-900">{previewTemplate.name}</h3>
+                      <p className="text-xs text-slate-500">{previewTemplate.categoryLabel}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setPreviewTemplate(null)}
+                    className="text-slate-400 hover:text-slate-600 text-xl font-bold leading-none cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Recipient Dynamic Name Customizer */}
+                <div className="flex items-center gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-200">
+                  <label className="text-xs font-bold text-slate-700 shrink-0">Sample Recipient Name:</label>
+                  <input
+                    type="text"
+                    value={previewName}
+                    onChange={(e) => setPreviewName(e.target.value)}
+                    placeholder="Type a recipient name..."
+                    className="flex-1 bg-white border border-slate-300 focus:border-blue-600 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-900 outline-none"
+                  />
+                </div>
+
+                {/* Rendered Preview Sandbox */}
+                <div className={`p-8 sm:p-12 rounded-2xl text-center space-y-6 ${previewTemplate.bgGradient} ${previewTemplate.borderStyle}`}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-left">
+                      <span className="text-2xl">{previewTemplate.sealEmoji}</span>
+                      <div>
+                        <p className="text-[11px] font-mono font-bold tracking-wider uppercase text-slate-800">{previewTemplate.issuer}</p>
+                        <p className="text-[8px] font-mono text-slate-400">Cryptographic Issuance Authority</p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-mono font-bold px-3 py-1 rounded-full border uppercase ${previewTemplate.badgeColor}`}>
+                      DIGITALLY SEALED ✓
+                    </span>
+                  </div>
+
+                  <div className="my-6 space-y-2">
+                    <p className="text-xs font-mono uppercase tracking-widest text-slate-400">Certificate of Completion</p>
+                    <h2 className="text-3xl sm:text-4xl font-black text-slate-950 font-serif tracking-tight">
+                      {previewName || "Recipient Name"}
+                    </h2>
+                    <p className="text-xs text-slate-600 max-w-md mx-auto pt-1 leading-relaxed">
+                      has demonstrated validated mastery and satisfied all credential requirements for:
+                    </p>
+                    <p className="text-sm font-bold text-slate-900 pt-1">
+                      {previewTemplate.program}
+                    </p>
+                  </div>
+
+                  <div className="pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4 text-left">
+                    <div className="text-[10px] font-mono text-slate-500">
+                      <p>Issued: August 30, 2026</p>
+                      <p>Registry: proofsy.tech/verify</p>
+                    </div>
+                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-2xs">
+                      <span className="text-xs">📱</span>
+                      <span className="text-[9px] font-mono font-bold text-blue-600">ISO/IEC 18004 QR CODE</span>
+                    </div>
+                    <div className="text-right text-[10px] font-mono text-emerald-600 font-bold">
+                      CERT-RSA-9941X7
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Footer Actions */}
+                <div className="flex flex-col sm:flex-row items-center justify-end gap-3 pt-2">
+                  <button
+                    onClick={() => setPreviewTemplate(null)}
+                    className="w-full sm:w-auto px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-100 cursor-pointer"
+                  >
+                    Close Preview
+                  </button>
+                  <Link
+                    href={`/events/new`}
+                    className="w-full sm:w-auto px-6 py-2.5 rounded-xl text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 shadow-md shadow-blue-500/20 text-center cursor-pointer transition"
+                  >
+                    Issue with This Template &rarr;
+                  </Link>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
