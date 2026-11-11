@@ -184,7 +184,7 @@ app.use("/api/ai", require("./routes/ai"));
 app.use("/api/v1", require("./routes/v1"));
 
 // Health check endpoint — detailed system status
-app.get("/api/health", async (req, res) => {
+app.get(["/health", "/api/health"], async (req, res) => {
   const memUsage = process.memoryUsage();
   let storageHealth = { provider: storageService.getProvider(), status: "unknown" };
   try {

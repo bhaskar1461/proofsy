@@ -1,0 +1,24 @@
+name: Keep Warm (Render Sleep Prevention)
+
+on:
+  schedule:
+    # Ping every 14 minutes to prevent Render free-tier spinning down after 15 minutes of inactivity
+    - cron: '*/14 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Health Endpoint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send keep-warm heartbeat
+        run: |
+          TARGET_URL="${{ secrets.BACKEND_HEALTH_URL || 'https://api.proofsy.tech/api/health' }}"
+          echo "Pinging ${TARGET_URL}..."
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "$TARGET_URL" || true)
+          echo "Heartbeat status: ${HTTP_STATUS}"
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "✓ Backend is warm and healthy."
+          else
+            echo "⚠ Backend responded with status: ${HTTP_STATUS} (may be waking up)"
+          fi

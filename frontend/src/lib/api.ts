@@ -17,10 +17,26 @@ export interface ApiResponse<T = unknown> {
   debugOtp?: string;
 }
 
-// Timeout wrapper for fetch
-async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 10000): Promise<Response> {
+// Waking state notifier for Render free-tier cold starts
+let pendingSlowRequests = 0;
+
+function notifyServerWaking(isWaking: boolean) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(isWaking ? "proofsy:server-waking" : "proofsy:server-ready"));
+  }
+}
+
+// Timeout wrapper for fetch (60s default to support Render cold starts)
+async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout = 60000): Promise<Response> {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
+  
+  // Notify UI if request takes longer than 2.5s (server waking)
+  const wakingTimer = setTimeout(() => {
+    pendingSlowRequests++;
+    notifyServerWaking(true);
+  }, 2500);
+
   try {
     const response = await fetch(url, {
       credentials: "include",
@@ -28,9 +44,23 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeout 
       signal: controller.signal
     });
     clearTimeout(id);
+    clearTimeout(wakingTimer);
+    if (pendingSlowRequests > 0) {
+      pendingSlowRequests--;
+      if (pendingSlowRequests === 0) {
+        notifyServerWaking(false);
+      }
+    }
     return response;
   } catch (error) {
     clearTimeout(id);
+    clearTimeout(wakingTimer);
+    if (pendingSlowRequests > 0) {
+      pendingSlowRequests--;
+      if (pendingSlowRequests === 0) {
+        notifyServerWaking(false);
+      }
+    }
     throw error;
   }
 }

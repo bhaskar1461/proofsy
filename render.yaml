@@ -14,13 +14,15 @@ services:
       - key: PORT
         value: "5000"
       - key: MONGODB_URI
-        sync: false  # You'll set this manually from MongoDB Atlas
+        sync: false  # MongoDB Atlas connection string
+      - key: JWT_SECRET
+        generateValue: true
+      - key: SIGNING_SECRET
+        generateValue: true
       - key: REDIS_URL
-        sync: false  # You'll set this manually from Upstash
+        sync: false  # Optional: Upstash Redis (falls back to in-memory queue if unset)
       - key: FRONTEND_BASE_URL
-        sync: false  # You'll set this after Vercel deploys
+        value: "https://proofsy.tech"
       - key: CORS_ORIGIN
-        sync: false
-      - key: PUPPETEER_EXECUTABLE_PATH
-        value: /usr/bin/google-chrome-stable
+        value: "https://proofsy.tech,https://www.proofsy.tech"
     healthCheckPath: /api/health

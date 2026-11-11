@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AuthProvider } from "@/contexts/AuthContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import ServerWakingBanner from "@/components/ServerWakingBanner";
 import "./globals.css";
 
 export const viewport: Viewport = {
@@ -240,6 +241,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-[#F8FAFC] text-slate-900 selection:bg-blue-600 selection:text-white">
+        <ServerWakingBanner />
         <AuthProvider>
           <ProtectedRoute>{children}</ProtectedRoute>
         </AuthProvider>
