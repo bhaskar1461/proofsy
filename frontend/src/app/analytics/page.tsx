@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
+import { MetricsGridSkeleton, ChartSkeleton } from "@/components/SkeletonLoaders";
 import { api, CertificateData, EventData, StatsData, VerificationAnalyticsData } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, pulseGlow } from "@/lib/animations";
 
@@ -307,7 +308,13 @@ export default function AnalyticsPage() {
             </div>
           )}
 
-          <AnimatePresence mode="wait">
+          {loading ? (
+            <div className="space-y-8">
+              <MetricsGridSkeleton count={4} />
+              <ChartSkeleton />
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
             {/* ══════════════════════ OVERVIEW TAB ══════════════════════ */}
             {activeTab === "overview" && (
               <motion.div key="overview" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} className="space-y-8">
@@ -624,7 +631,8 @@ export default function AnalyticsPage() {
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        )}
+      </motion.div>
       </main>
     </div>
   );

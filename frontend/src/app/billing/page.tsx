@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
+import { MetricsGridSkeleton } from "@/components/SkeletonLoaders";
 import { api } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, cardHover, cardTap, pulseGlow } from "@/lib/animations";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,9 +18,9 @@ export default function BillingPage() {
   const pricingPlans = [
     {
       id: "free",
-      name: "Free Sandbox",
+      name: "Starter Evaluation",
       price: "₹0",
-      description: "Ideal for testing workflows and small local workshops.",
+      description: "Ideal for testing workflows and trial runs.",
       features: [
         "250 lifetime certificates",
         "Standard verification page",
@@ -117,7 +118,7 @@ export default function BillingPage() {
       case "annual-pass": return "Unlimited Department Pass";
       case "mega-pass": return "Mega Fest Pass";
       case "fest-pass": return "Single Fest Pass";
-      default: return "Free Sandbox";
+      default: return "Starter Evaluation";
     }
   };
 
@@ -145,8 +146,11 @@ export default function BillingPage() {
             </div>
           )}
 
+          {/* Loading Skeleton */}
+          {loading && <MetricsGridSkeleton count={3} />}
+
           {/* Active Usage Card */}
-          {workspace && (
+          {!loading && workspace && (
             <div className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-2xl p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">
               <div className="space-y-1">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[var(--color-muted)]">Active Workspace Context</span>

@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import RevocationModal from "@/components/RevocationModal";
 import CSVImportWizard from "@/components/CSVImportWizard";
+import { EventDetailSkeleton } from "@/components/SkeletonLoaders";
 import { api, EventDetailData, BACKEND_URL } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, tableRow, pulseGlow, cardTap } from "@/lib/animations";
 
@@ -17,6 +18,7 @@ export default function EventDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sendingEmails, setSendingEmails] = useState(false);
+  const [downloadingZip, setDownloadingZip] = useState(false);
   const [emailResult, setEmailResult] = useState<string | null>(null);
   const [lifecycleResult, setLifecycleResult] = useState<string | null>(null);
   const [lifecycleLoading, setLifecycleLoading] = useState(false);
@@ -94,6 +96,42 @@ export default function EventDetailPage() {
     setSendingEmails(false);
   };
 
+  const handleDownloadZip = async () => {
+    if (!eventId) return;
+    try {
+      setDownloadingZip(true);
+      const token = typeof window !== "undefined" ? localStorage.getItem("proofsy_admin_token") : null;
+      const workspaceId = typeof window !== "undefined" ? localStorage.getItem("proofsy_workspace_id") : null;
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      if (workspaceId) headers["x-workspace-id"] = workspaceId;
+
+      const res = await fetch(`${BACKEND_URL}/api/events/${eventId}/download-zip`, {
+        headers,
+        credentials: "include",
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || "Failed to download certificates ZIP");
+      }
+
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${event?.name ? event.name.replace(/[^a-zA-Z0-9_-]/g, "_") : "event"}-certificates.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || "Failed to download ZIP");
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
   const runLifecycleAction = async (action: () => Promise<{ success: boolean; error?: string; message?: string }>, successMessage: string) => {
     setLifecycleLoading(true);
     setLifecycleResult(null);
@@ -138,8 +176,8 @@ export default function EventDetailPage() {
         <motion.div variants={pulseGlow} animate="animate" className="absolute top-16 right-20 w-56 h-56 bg-blue-200/15 rounded-full blur-3xl pointer-events-none" />
 
         {loading ? (
-          <div className="flex items-center justify-center py-32">
-            <div className="w-10 h-10 rounded-full border-4 border-[var(--color-border)] border-t-[var(--color-primary)] animate-spin" />
+          <div className="p-8">
+            <EventDetailSkeleton />
           </div>
         ) : error || !event ? (
           <div className="flex items-center justify-center py-32">
@@ -184,6 +222,15 @@ export default function EventDetailPage() {
                       Add Recipients
                     </Link>
                   </motion.div>
+                  <motion.button
+                    onClick={handleDownloadZip}
+                    disabled={downloadingZip || generated === 0}
+                    whileTap={cardTap}
+                    className="border border-indigo-200 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-100 flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" /></svg>
+                    {downloadingZip ? "Preparing ZIP..." : "Download ZIP"}
+                  </motion.button>
                   <motion.button
                     onClick={handleSendEmails}
                     disabled={sendingEmails || generated === 0}

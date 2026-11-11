@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
 import MetricCard from "@/components/MetricCard";
 import PublicLandingPage from "@/components/PublicLandingPage";
+import { TableSkeleton, MetricsGridSkeleton } from "@/components/SkeletonLoaders";
 import { useAuth } from "@/contexts/AuthContext";
 import { api, CertificateData, EventData, StatsData } from "@/lib/api";
 import { pageVariants, staggerContainer, fadeUp, headerSlide, float, pulseGlow, cardHover, cardTap } from "@/lib/animations";
@@ -185,10 +186,7 @@ export default function HomePage() {
             )}
 
             {loading ? (
-              <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-6 py-12 text-center">
-                <svg className="w-6 h-6 animate-spin mx-auto text-[var(--color-muted)]" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                <p className="text-sm text-[var(--color-muted)] mt-3">Loading events...</p>
-              </div>
+              <TableSkeleton rows={4} hasHeader={false} />
             ) : events.length === 0 ? (
               <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] px-6 py-12 text-center">
                 <svg className="w-12 h-12 mx-auto text-[var(--color-muted)] opacity-30 mb-4" fill="none" stroke="currentColor" strokeWidth={1} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" /></svg>

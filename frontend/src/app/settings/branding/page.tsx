@@ -17,9 +17,9 @@ const defaultBranding: BrandingData = {
 
 const brandPresets = [
   { name: "Proofsy Royal", primary: "#2563EB", accent: "#10B981" },
-  { name: "MIT Crimson", primary: "#A31F34", accent: "#8A8B8C" },
-  { name: "Stanford Cardinal", primary: "#8C1515", accent: "#B269A0" },
-  { name: "Oxford Navy", primary: "#002147", accent: "#C59B27" },
+  { name: "Crimson Red", primary: "#A31F34", accent: "#8A8B8C" },
+  { name: "Cardinal Rose", primary: "#8C1515", accent: "#B269A0" },
+  { name: "Deep Navy", primary: "#002147", accent: "#C59B27" },
   { name: "Emerald Tech", primary: "#059669", accent: "#3B82F6" },
   { name: "Executive Onyx", primary: "#0F172A", accent: "#D97706" },
 ];

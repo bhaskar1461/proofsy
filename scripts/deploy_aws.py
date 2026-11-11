@@ -100,7 +100,7 @@ if p.returncode == 0:
     ]
     subprocess.run(health_cmd)
     print("\n========================================================================")
-    print("✓ SUCCESS: Production deployment on AWS completed! (https://proofsy.tech)")
+    print("[SUCCESS] Production deployment on AWS completed! (https://proofsy.tech)")
     print("========================================================================")
 else:
-    print("\n❌ Deployment failed. Check the error output above.")
+    print("\n[FAILED] Deployment failed. Check the error output above.")

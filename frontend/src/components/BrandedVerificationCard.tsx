@@ -112,7 +112,9 @@ export default function BrandedVerificationCard({
         </div>
         <div>
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Issued By</p>
-          <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certificate.organizerName || branding?.workspaceName || "Proofsy")}</p>
+          <p className="text-xs font-semibold text-[var(--color-foreground)]">
+            Issued by {decodeHtml(certificate.organizerName || branding?.workspaceName || "Organizer")} via Proofsy
+          </p>
         </div>
         <div className="sm:col-span-2">
           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Credential</p>

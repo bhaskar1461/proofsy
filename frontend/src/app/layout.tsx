@@ -140,13 +140,6 @@ const jsonLdSchemas = {
         "Custom Institutional Branding & White-Label Domains",
         "SOC2-Ready Compliance & Key Rotation Audit Logs",
       ],
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.9",
-        "ratingCount": "128",
-        "bestRating": "5",
-        "worstRating": "1",
-      },
     },
     {
       "@type": "WebSite",
@@ -246,7 +239,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLdSchemas) }}
         />
       </head>
-      <body className="font-sans bg-gray-50 text-gray-900">
+      <body className="font-sans antialiased bg-[#F8FAFC] text-slate-900 selection:bg-blue-600 selection:text-white">
         <AuthProvider>
           <ProtectedRoute>{children}</ProtectedRoute>
         </AuthProvider>

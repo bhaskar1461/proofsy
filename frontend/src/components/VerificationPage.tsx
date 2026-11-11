@@ -487,6 +487,12 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                           <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Event Name</p>
                           <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.eventName)}</p>
                         </div>
+                        <div>
+                          <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Issuer</p>
+                          <p className="text-xs font-semibold text-[var(--color-foreground)]">
+                            Issued by {decodeHtml(certData.organizerName || branding?.workspaceName || "Organizer")} via Proofsy
+                          </p>
+                        </div>
 
                         {certData.isCryptographicallyVerified && (
                           <div className="border-t border-dashed border-[var(--color-border)] pt-4 mt-2">
@@ -640,8 +646,14 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                           <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
                         </div>
                         <div>
-                          <h2 className="text-sm font-bold text-[var(--color-error)]">Verification Failed</h2>
-                          <p className="text-[10px] text-[var(--color-error)] opacity-75">{invalidReason || "No database record corresponds to this code."}</p>
+                          <h2 className="text-sm font-bold text-[var(--color-error)]">
+                            {certData?.status === "revoked" ? "Certificate Revoked" : "Certificate Not Found"}
+                          </h2>
+                          <p className="text-[10px] text-[var(--color-error)] opacity-75">
+                            {certData?.status === "revoked"
+                              ? (invalidReason || "This credential has been officially revoked by the organizer.")
+                              : (invalidReason || "No database record corresponds to this verification code.")}
+                          </p>
                         </div>
                       </div>
                       <div className="p-4 text-xs text-[var(--color-muted)] space-y-4">
@@ -763,6 +775,12 @@ export default function VerificationPage({ initialCode = "" }: { initialCode?: s
                       <div>
                         <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Event Name</p>
                         <p className="text-xs font-semibold text-[var(--color-foreground)]">{decodeHtml(certData.eventName)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-0.5">Issuer</p>
+                        <p className="text-xs font-semibold text-[var(--color-foreground)]">
+                          Issued by {decodeHtml(certData.organizerName || branding?.workspaceName || "Organizer")} via Proofsy
+                        </p>
                       </div>
 
                       <div className="border-t border-dashed border-[var(--color-border)] pt-4">

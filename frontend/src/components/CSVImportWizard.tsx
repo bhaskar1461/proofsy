@@ -73,16 +73,27 @@ export default function CSVImportWizard({ eventId, eventName, onComplete, onClos
   }, []);
 
   const handleFile = useCallback((f: File) => {
-    if (!f.name.endsWith(".csv")) {
-      setParseError("Only CSV files are supported.");
+    const ext = f.name.toLowerCase();
+    if (!ext.endsWith(".csv") && !ext.endsWith(".xlsx") && !ext.endsWith(".xls")) {
+      setParseError("Please upload a .csv, .xlsx, or .xls file.");
       return;
     }
     setFile(f);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      parseCSV(e.target?.result as string);
-    };
-    reader.readAsText(f);
+    if (ext.endsWith(".csv")) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        parseCSV(e.target?.result as string);
+      };
+      reader.readAsText(f);
+    } else {
+      // Excel files (.xlsx, .xls) are fully parsed and validated by backend
+      setHeaders(["Recipient Name", "Email", "(Excel Document)"]);
+      setCsvData([{ "Recipient Name": "Parsed from Excel sheet", "Email": f.name }]);
+      setNameCol("Recipient Name");
+      setEmailCol("Email");
+      setParseError(null);
+      setStep("preview");
+    }
   }, [parseCSV]);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -111,7 +122,14 @@ export default function CSVImportWizard({ eventId, eventName, onComplete, onClos
           completedAt: null,
         });
       } else {
-        setParseError((res as { error?: string }).error || "Upload failed");
+        const anyRes = res as unknown as { error?: string; rowErrors?: Array<{ row: number; error: string }> };
+        const baseError = anyRes.error || "Upload failed";
+        if (anyRes.rowErrors && anyRes.rowErrors.length > 0) {
+          const formatted = anyRes.rowErrors.map((r) => `Row ${r.row}: ${r.error}`).slice(0, 5).join("; ");
+          setParseError(`${baseError} — ${formatted}`);
+        } else {
+          setParseError(baseError);
+        }
         setStep("confirm");
       }
     } catch {
@@ -220,7 +238,7 @@ export default function CSVImportWizard({ eventId, eventName, onComplete, onClos
                   <p className="text-sm text-[var(--color-muted)] mt-1">or click to browse</p>
                   <p className="text-[11px] text-[var(--color-muted)] mt-3 opacity-60">Required columns: <code className="bg-[var(--color-surface-alt)] px-1.5 py-0.5 rounded">name</code> and <code className="bg-[var(--color-surface-alt)] px-1.5 py-0.5 rounded">email</code></p>
                 </div>
-                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
+                <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }} />
                 {parseError && (
                   <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">{parseError}</div>
                 )}

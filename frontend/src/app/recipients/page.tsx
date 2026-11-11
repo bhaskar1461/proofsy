@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import Sidebar from "@/components/Sidebar";
+import { TableSkeleton } from "@/components/SkeletonLoaders";
 import { api, CertificateData, UserLookupData } from "@/lib/api";
 import { pageVariants, headerSlide, pulseGlow, tableRow } from "@/lib/animations";
 
@@ -218,10 +219,10 @@ export default function RecipientsPage() {
             </p>
           </div>
 
-          <div className="bg-white rounded-2xl border border-[var(--color-border)] overflow-hidden">
-            {loading ? (
-              <div className="px-6 py-16 text-center text-sm text-[var(--color-muted)]">Loading recipients...</div>
-            ) : (
+          {loading ? (
+            <TableSkeleton rows={6} hasHeader={false} />
+          ) : (
+            <div className="bg-white rounded-2xl border border-[var(--color-border)] overflow-hidden">
               <div className="responsive-table-wrapper">
                 <table className="w-full text-left">
                   <thead>
@@ -253,8 +254,8 @@ export default function RecipientsPage() {
                   </tbody>
                 </table>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </motion.div>
       </main>
     </div>

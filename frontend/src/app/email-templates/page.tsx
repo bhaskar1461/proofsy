@@ -26,7 +26,7 @@ const MERGE_TAGS = [
   { label: "Verification Code", tag: "[cert.code]", desc: "e.g. CERT-RSA-9941X7" },
   { label: "Direct PDF Download URL", tag: "[cert.pdfUrl]", desc: "https://proofsy.tech/download/..." },
   { label: "Online Verification URL", tag: "[cert.verifyUrl]", desc: "https://proofsy.tech/verify/..." },
-  { label: "Organization Name", tag: "[org.name]", desc: "e.g. Stanford Academy" },
+  { label: "Organization Name", tag: "[org.name]", desc: "e.g. Nexus Academy" },
 ];
 
 const CATEGORY_COLORS: Record<EmailTemplate["category"], string> = {
