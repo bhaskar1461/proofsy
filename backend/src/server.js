@@ -76,13 +76,14 @@ const RATE_LIMIT_MAX = parseInt(process.env.RATE_LIMIT_MAX, 10) || (process.env.
 
 let apiRedisStore = undefined;
 let authRedisStore = undefined;
+let verifyRedisStore = undefined;
 if (process.env.REDIS_URL && (process.env.NODE_ENV === "production" || process.env.USE_REDIS === "true")) {
   try {
     const { RedisStore } = require("rate-limit-redis");
     const Redis = require("ioredis");
     const redisClient = new Redis(process.env.REDIS_URL, {
       maxRetriesPerRequest: 1,
-      connectTimeout: 2000,
+      connectTimeout: 5000,
     });
     redisClient.on("error", (err) => {
       logger.warn("[RateLimit] Redis store unavailable, falling back to local memory store: " + err.message);
@@ -94,6 +95,10 @@ if (process.env.REDIS_URL && (process.env.NODE_ENV === "production" || process.e
     authRedisStore = new RedisStore({
       sendCommand: (...args) => redisClient.call(...args),
       prefix: "rl:auth:",
+    });
+    verifyRedisStore = new RedisStore({
+      sendCommand: (...args) => redisClient.call(...args),
+      prefix: "rl:verify:",
     });
     logger.info("✓ Rate limiting configured with distributed Redis store");
   } catch (err) {
@@ -128,7 +133,7 @@ const verifyLimiter = rateLimit({
   message: { success: false, error: "Too many verification attempts, please try again later." },
   standardHeaders: true,
   legacyHeaders: false,
-  ...(apiRedisStore && { store: apiRedisStore }),
+  ...(verifyRedisStore && { store: verifyRedisStore }),
 });
 
 // Correlation ID middleware — must be early to tag all downstream logs
@@ -269,11 +274,13 @@ async function startServer() {
   try {
     await mongoose.connect(mongoUri, {
       maxPoolSize: 10,
-      minPoolSize: 5,
-      serverSelectionTimeoutMS: 2000,
+      minPoolSize: 2,
+      serverSelectionTimeoutMS: 10000,
     });
-    logger.info("✓ Connected to MongoDB: " + mongoUri);
+    const maskedUri = mongoUri ? mongoUri.replace(/:([^:@]+)@/, ":****@") : "";
+    logger.info("✓ Connected to MongoDB: " + maskedUri);
   } catch (err) {
+    logger.error("Failed to connect to MongoDB (" + err.message + "). Exiting...");
     // Only allow in-memory fallback in development or test
     if (process.env.NODE_ENV === "development" || process.env.NODE_ENV === "test") {
       logger.warn(
@@ -285,7 +292,6 @@ async function startServer() {
       await mongoose.connect(mongoUri);
       logger.info("✓ Connected to in-memory MongoDB: " + mongoUri);
     } else {
-      logger.error("Failed to connect to MongoDB. Exiting...");
       process.exit(1);
     }
   }

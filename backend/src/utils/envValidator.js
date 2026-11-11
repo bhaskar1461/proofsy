@@ -21,7 +21,6 @@ const productionRequiredVars = [
 const optionalEnvVars = {
   NODE_ENV: "development",
   PORT: "5000",
-  REDIS_URL: "redis://localhost:6379",
   STORAGE_PROVIDER: "local",
   LOG_LEVEL: "info",
   RATE_LIMIT_WINDOW_MS: "900000",
@@ -30,6 +29,10 @@ const optionalEnvVars = {
 
 const validateEnv = () => {
   const env = process.env.NODE_ENV || "development";
+
+  if (env === "development" && !process.env.REDIS_URL) {
+    process.env.REDIS_URL = "redis://localhost:6379";
+  }
 
   // In test environments we provide a deterministic secret so the suite can run
   // without external configuration, but it is still a real (non-fallback) value.
