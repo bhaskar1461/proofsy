@@ -3,7 +3,7 @@
 **Author:** Bhaskar Sharma  
 **Target Roles:** Software Development Engineer (SDE) / Backend Engineer  
 **Live Platform:** [https://proofsy.tech](https://proofsy.tech)  
-**Public Repository:** [https://github.com/bhaskarsharma0109-prog/proofsy](https://github.com/bhaskarsharma0109-prog/proofsy)  
+**Public Repository:** [https://github.com/bhaskar1461/proofsy](https://github.com/bhaskar1461/proofsy)  
 
 ---
 

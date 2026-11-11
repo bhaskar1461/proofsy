@@ -1,7 +1,7 @@
 # Proofsy — Tamper-Proof Digital Certificate Issuance & Verification Platform
 
-[![CI/CD](https://github.com/bhaskarsharma0109-prog/proofsy/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/bhaskarsharma0109-prog/proofsy/actions/workflows/ci-cd.yml)
-[![Keep Warm](https://github.com/bhaskarsharma0109-prog/proofsy/actions/workflows/keep-warm.yml/badge.svg)](https://github.com/bhaskarsharma0109-prog/proofsy/actions/workflows/keep-warm.yml)
+[![CI/CD](https://github.com/bhaskar1461/proofsy/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/bhaskar1461/proofsy/actions/workflows/ci-cd.yml)
+[![Keep Warm](https://github.com/bhaskar1461/proofsy/actions/workflows/keep-warm.yml/badge.svg)](https://github.com/bhaskar1461/proofsy/actions/workflows/keep-warm.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Live Site](https://img.shields.io/badge/Live-proofsy.tech-6366F1)](https://proofsy.tech)
 
@@ -104,7 +104,7 @@ function verifyHmacPayload(payload, signatureHex, secret) {
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/bhaskarsharma0109-prog/proofsy.git && cd proofsy
+git clone https://github.com/bhaskar1461/proofsy.git && cd proofsy
 
 # 2. Setup backend
 cd backend && npm install && cp .env.example .env
