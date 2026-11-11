@@ -25,4 +25,24 @@ services:
         value: "https://proofsy.tech"
       - key: CORS_ORIGIN
         value: "https://proofsy.tech,https://www.proofsy.tech"
+      - key: SMTP_HOST
+        value: "smtp.gmail.com"
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_SECURE
+        value: "false"
+      - key: SMTP_USER
+        value: "Invitation@suh.edu.in"
+      - key: SMTP_PASS
+        sync: false
+      - key: EMAIL_FROM
+        value: "Invitation@suh.edu.in"
+      - key: EMAIL_FROM_NAME
+        value: "Proofsy Certificates"
+      - key: EMAIL_REPLY_TO
+        value: "bhaskar@proofsy.tech"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_MODEL
+        value: "qwen/qwen3.6-27b"
     healthCheckPath: /api/health
