@@ -264,12 +264,13 @@ let mongod = null;
 let server = null;
 
 const { ensureStarterTemplates } = require("./utils/templateSetup");
+const { normalizeMongoUri } = require("./utils/mongoUtils");
 
 async function startServer() {
   // Ensure starter templates exist in runtime volume
   ensureStarterTemplates();
 
-  let mongoUri = process.env.MONGODB_URI;
+  let mongoUri = normalizeMongoUri(process.env.MONGODB_URI);
 
   try {
     await mongoose.connect(mongoUri, {

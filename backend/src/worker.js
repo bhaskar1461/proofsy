@@ -12,8 +12,10 @@ require("dotenv").config();
 const mongoose = require("mongoose");
 const Queue = require("bull");
 
+const { normalizeMongoUri } = require("./utils/mongoUtils");
+
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const MONGODB_URI = process.env.MONGODB_URI;
+const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI);
 
 // Create the queue (must match the name used in the API server)
 const certQueue = new Queue("certificate-generation", REDIS_URL, {

@@ -8,8 +8,10 @@ const Queue = require("bull");
 const { queueCertificateGeneration } = require("./certificateWorker");
 const { startExpiryChecker } = require("../jobs/expiryChecker");
 
+const { normalizeMongoUri } = require("../utils/mongoUtils");
+
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
-const MONGODB_URI = process.env.MONGODB_URI || "mongodb://localhost:27017/proofsy";
+const MONGODB_URI = normalizeMongoUri(process.env.MONGODB_URI || "mongodb://localhost:27017/proofsy");
 
 async function start() {
   // Connect to MongoDB
