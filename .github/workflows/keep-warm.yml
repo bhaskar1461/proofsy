@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: Send keep-warm heartbeat
         run: |
-          TARGET_URL="${{ secrets.BACKEND_HEALTH_URL || 'https://api.proofsy.tech/api/health' }}"
+          TARGET_URL="${{ secrets.BACKEND_HEALTH_URL || 'https://proofsy-backend.onrender.com/api/health' }}"
           echo "Pinging ${TARGET_URL}..."
           HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 45 "$TARGET_URL" || true)
           echo "Heartbeat status: ${HTTP_STATUS}"
