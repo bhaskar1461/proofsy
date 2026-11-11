@@ -172,3 +172,4 @@ npm test -- tests/phase1-core-integrity.test.js tests/signingProvider.test.js
 - [ ] W3C Verifiable Credentials (VC) and Decentralized Identifiers (DID) support.
 - [ ] Native Apple Wallet and Google Wallet pass generation (.pkpass).
 - [ ] Webhook triggers on certificate verification for organizer CRM integration.
+

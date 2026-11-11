@@ -27,17 +27,17 @@ function toIsoUtc(date) {
  * Build canonical payload according to Phase 1 spec: (id, name, event, issuer, date)
  * All fields strictly normalized and sorted alphabetically.
  */
-function buildHmacCanonicalPayload({ id, name, event, issuer, date }) {
+function buildHmacCanonicalPayload({ id, name, recipientName, event, eventName, issuer, organizerName, date, eventDate }) {
   const normId = String(id || "").trim().toUpperCase();
   if (!normId) {
     throw new Error("id (verificationCode) is required for HMAC canonical payload");
   }
   return {
-    date: toIsoUtc(date),
-    event: String(event || "").trim().normalize("NFC"),
+    date: toIsoUtc(date || eventDate),
+    event: String(event || eventName || "").trim().normalize("NFC"),
     id: normId,
-    issuer: String(issuer || "").trim().normalize("NFC"),
-    name: String(name || "").trim().normalize("NFC"),
+    issuer: String(issuer || organizerName || "").trim().normalize("NFC"),
+    name: String(name || recipientName || "").trim().normalize("NFC"),
   };
 }
 

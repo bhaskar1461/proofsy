@@ -74,3 +74,4 @@
 > *We implemented a two-part solution:*
 > 1. *In the frontend API client (`frontend/src/lib/api.ts`), requests timeout after 60 seconds rather than failing prematurely at 10 seconds. If a request is pending for more than 2.5 seconds, the client dispatches a `proofsy:server-waking` event, triggering the `<ServerWakingBanner>` component to display an informative status bar with an active timer explaining that the server is waking up.*
 > 2. *We configured a GitHub Actions cron job (`.github/workflows/keep-warm.yml`) that sends an automated HTTP ping to `/api/health` every 14 minutes, keeping the backend warm during active hours."*
+

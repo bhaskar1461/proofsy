@@ -95,3 +95,4 @@ function verifyHmacPayload(payload, signatureHex, secret) {
 1. **Decentralized W3C Verifiable Credentials (DID):** Transition to W3C-standard JSON-LD Verifiable Credentials (VCs) so attendees can store credentials directly in mobile identity wallets (Apple Wallet, Google Wallet).
 2. **Postgres Row-Level Security (RLS):** While MongoDB document isolation works well, migrating multi-tenant organizer data to PostgreSQL with native Row-Level Security would provide hardware-enforced tenant segregation at the database engine level.
 3. **Ed25519 Elliptic-Curve Signatures:** Replace 2048-bit RSA keys with Ed25519 for smaller QR code payload sizes and faster signature generation.
+
