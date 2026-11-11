@@ -8,9 +8,9 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-# Create directories for uploads and generated PDFs
-RUN mkdir -p uploads storage/pdfs storage/templates storage/fonts \
-    && chown -R node:node uploads storage
+# Create directories for uploads, storage, and logs
+RUN mkdir -p uploads storage/pdfs storage/templates storage/fonts logs \
+    && chown -R node:node /usr/src/app
 
 USER node
 

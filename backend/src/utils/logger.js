@@ -9,6 +9,7 @@
  */
 const winston = require("winston");
 const path = require("path");
+const fs = require("fs");
 
 const env = process.env.NODE_ENV || "development";
 const LOG_DIR = path.join(__dirname, "../../logs");
@@ -56,40 +57,51 @@ function buildTransports() {
     );
   }
 
-  // File transports (all environments)
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(LOG_DIR, "error.log"),
-      level: "error",
-      format: prodJsonFormat,
-      maxsize: 10 * 1024 * 1024, // 10MB
-      maxFiles: 5,
-      tailable: true,
-    })
-  );
+  // File transports (wrapped defensively so container permissions cannot crash startup)
+  const disableFileLogs = process.env.DISABLE_FILE_LOGS === "true";
+  if (!disableFileLogs) {
+    try {
+      if (!fs.existsSync(LOG_DIR)) {
+        fs.mkdirSync(LOG_DIR, { recursive: true });
+      }
 
-  transports.push(
-    new winston.transports.File({
-      filename: path.join(LOG_DIR, "combined.log"),
-      format: prodJsonFormat,
-      maxsize: 10 * 1024 * 1024, // 10MB
-      maxFiles: 10,
-      tailable: true,
-    })
-  );
+      transports.push(
+        new winston.transports.File({
+          filename: path.join(LOG_DIR, "error.log"),
+          level: "error",
+          format: prodJsonFormat,
+          maxsize: 10 * 1024 * 1024, // 10MB
+          maxFiles: 5,
+          tailable: true,
+        })
+      );
 
-  // Production-only: separate access log for HTTP requests
-  if (env === "production" || env === "staging") {
-    transports.push(
-      new winston.transports.File({
-        filename: path.join(LOG_DIR, "access.log"),
-        level: "http",
-        format: prodJsonFormat,
-        maxsize: 20 * 1024 * 1024, // 20MB
-        maxFiles: 5,
-        tailable: true,
-      })
-    );
+      transports.push(
+        new winston.transports.File({
+          filename: path.join(LOG_DIR, "combined.log"),
+          format: prodJsonFormat,
+          maxsize: 10 * 1024 * 1024, // 10MB
+          maxFiles: 10,
+          tailable: true,
+        })
+      );
+
+      // Production-only: separate access log for HTTP requests
+      if (env === "production" || env === "staging") {
+        transports.push(
+          new winston.transports.File({
+            filename: path.join(LOG_DIR, "access.log"),
+            level: "http",
+            format: prodJsonFormat,
+            maxsize: 20 * 1024 * 1024, // 20MB
+            maxFiles: 5,
+            tailable: true,
+          })
+        );
+      }
+    } catch (err) {
+      console.warn("[Logger] Could not initialize file logging transports, falling back to stdout:", err.message);
+    }
   }
 
   return transports;
