@@ -121,6 +121,16 @@ const authLimiter = rateLimit({
   ...(authRedisStore && { store: authRedisStore }),
 });
 
+// Dedicated rate limiter for public verification endpoint
+const verifyLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === "production" ? 120 : 300,
+  message: { success: false, error: "Too many verification attempts, please try again later." },
+  standardHeaders: true,
+  legacyHeaders: false,
+  ...(apiRedisStore && { store: apiRedisStore }),
+});
+
 // Correlation ID middleware — must be early to tag all downstream logs
 app.use(correlationMiddleware);
 
@@ -162,7 +172,7 @@ app.use("/api/auth", authLimiter, require("./routes/auth"));
 app.use("/api/events", require("./routes/events"));
 app.use("/api/certificates", require("./routes/certificates"));
 app.use("/api/users", require("./routes/users"));
-app.use("/api/verify", require("./routes/verify"));
+app.use("/api/verify", verifyLimiter, require("./routes/verify"));
 app.use("/api/templates", require("./routes/templates"));
 app.use("/api/workspaces", require("./routes/workspaces"));
 app.use("/api/billing", require("./routes/billing"));

@@ -1,6 +1,6 @@
 const Certificate = require("../models/Certificate");
 const Workspace = require("../models/Workspace");
-const { getSigningProvider, toIsoUtc } = require("../services/signing");
+const { getSigningProvider, toIsoUtc, verifyHmacPayload } = require("../services/signing");
 
 const defaultBranding = {
   logo: "",
@@ -11,16 +11,6 @@ const defaultBranding = {
   verificationPageTitle: "",
   footerText: "",
 };
-
-function maskEmail(email) {
-  if (!email || typeof email !== "string" || !email.includes("@")) return "";
-  const [localPart, domain] = email.split("@");
-  if (localPart.length <= 2) {
-    return `${localPart[0]}*@${domain}`;
-  }
-  const maskedLocal = `${localPart[0]}${"*".repeat(Math.min(localPart.length - 2, 4))}${localPart[localPart.length - 1]}`;
-  return `${maskedLocal}@${domain}`;
-}
 
 function normalizeBranding(workspace) {
   const rawBranding = workspace?.branding;
@@ -37,29 +27,31 @@ function normalizeBranding(workspace) {
   };
 }
 
-function serializeCertificate(certificate, isSignatureValid = false, exposeFullEmail = false) {
-  const rawEmail = certificate.userId?.email || "";
-  const displayEmail = exposeFullEmail ? rawEmail : maskEmail(rawEmail);
+function serializeCertificate(certificate, isSignatureValid = false) {
+  const organizer = certificate.eventId?.organizerName || "Event Organizer";
 
   return {
+    id: certificate.verificationCode,
+    verificationCode: certificate.verificationCode,
     recipientName: certificate.userId?.name || "Unknown",
-    recipientEmail: displayEmail,
+    // Privacy enforcement: Verify page shows only name, event, issuer, date. No emails or phone numbers.
     eventName: certificate.eventId?.name || "Unknown Event",
     eventDate: certificate.eventId?.date ? toIsoUtc(certificate.eventId.date) : null,
-    organizerName: certificate.eventId?.organizerName || "",
+    organizerName: organizer,
+    issuedBy: `Issued by ${organizer} via Proofsy`,
     issuedAt: toIsoUtc(certificate.createdAt) || new Date().toISOString(),
     expiresAt: certificate.expiresAt ? toIsoUtc(certificate.expiresAt) : null,
     revokedAt: certificate.revokedAt ? toIsoUtc(certificate.revokedAt) : null,
     revocationReason: certificate.revocationReason || "",
     suspendedAt: certificate.suspendedAt ? toIsoUtc(certificate.suspendedAt) : null,
-    status: certificate.status,
+    status: certificate.status === "revoked" ? "revoked" : (isSignatureValid ? "valid" : "invalid"),
     pdfUrl: certificate.pdfUrl,
     pngUrl: certificate.pngUrl || null,
     svgUrl: certificate.svgUrl || null,
     cryptographicSignature: certificate.cryptographicSignature || null,
-    signingProvider: certificate.signingProvider || "institution",
+    signingProvider: certificate.signingProvider || "hmac-sha256",
     signingKeyId: certificate.signingKeyId || null,
-    signatureAlgorithm: certificate.signatureAlgorithm || "RSA-SHA256",
+    signatureAlgorithm: certificate.signatureAlgorithm || "HMAC-SHA256",
     signedAt: certificate.signedAt ? toIsoUtc(certificate.signedAt) : (certificate.createdAt ? toIsoUtc(certificate.createdAt) : null),
     isCryptographicallyVerified: isSignatureValid,
   };
@@ -166,31 +158,59 @@ exports.verifyCertificate = async (req, res) => {
       }
     }
 
-    // Cryptographic signature verification via SigningProvider
-    const claims = {
-      verificationCode: certificate.verificationCode,
-      recipientName: certificate.userId?.name || "Unknown",
-      recipientEmail: certificate.userId?.email || "",
-      eventName: certificate.eventId?.name || "Unknown Event",
-      eventDate: certificate.eventId?.date,
-      organizationId: certificate.organizationId || certificate.eventId?.organizationId,
-      issuedAt: certificate.createdAt,
-      expiresAt: certificate.expiresAt || null,
-    };
+    // Cryptographic signature verification: HMAC-SHA256 (constant-time) with legacy RSA fallback
+    let isSignatureValid = false;
+    let signatureError = null;
 
-    const signingProvider = getSigningProvider(certificate.signingProvider || "institution");
-    const verifyResult = await signingProvider.verify(claims, certificate.cryptographicSignature, {
-      keyId: certificate.signingKeyId,
-      legacy: !certificate.signingKeyId, // if legacy cert without keyId, use legacy payload mode
-    });
+    if (certificate.cryptographicSignature) {
+      const isHmac = certificate.signatureAlgorithm === "HMAC-SHA256" || 
+                     certificate.signingProvider === "hmac-sha256" ||
+                     /^[a-f0-9]{64}$/i.test(certificate.cryptographicSignature);
 
-    const isSignatureValid = verifyResult.isValid;
+      if (isHmac) {
+        const hmacPayload = {
+          id: certificate.verificationCode,
+          name: certificate.userId?.name || "",
+          event: certificate.eventId?.name || "",
+          issuer: certificate.eventId?.organizerName || "",
+          date: certificate.eventId?.date,
+        };
+        isSignatureValid = verifyHmacPayload(hmacPayload, certificate.cryptographicSignature);
+        if (!isSignatureValid) {
+          signatureError = "Cryptographic signature verification failed (tampered payload or invalid signature)";
+        }
+      } else {
+        // Fallback to RSA verification for legacy certs
+        try {
+          const claims = {
+            verificationCode: certificate.verificationCode,
+            recipientName: certificate.userId?.name || "Unknown",
+            recipientEmail: certificate.userId?.email || "",
+            eventName: certificate.eventId?.name || "Unknown Event",
+            eventDate: certificate.eventId?.date,
+            organizationId: certificate.organizationId || certificate.eventId?.organizationId,
+            issuedAt: certificate.createdAt,
+            expiresAt: certificate.expiresAt || null,
+          };
+          const signingProvider = getSigningProvider(certificate.signingProvider || "institution");
+          const verifyResult = await signingProvider.verify(claims, certificate.cryptographicSignature, {
+            keyId: certificate.signingKeyId,
+            legacy: !certificate.signingKeyId,
+          });
+          isSignatureValid = verifyResult.isValid;
+          if (!isSignatureValid) signatureError = verifyResult.error;
+        } catch (rsaErr) {
+          isSignatureValid = false;
+          signatureError = rsaErr.message;
+        }
+      }
+    }
 
     // Cryptographic validation gate: If signature does not verify, mark entire response invalid
     if (!isSignatureValid) {
       return invalidVerificationResponse(
         res,
-        verifyResult.error || "Cryptographic signature verification failed (data altered or invalid signing key)",
+        signatureError || "Cryptographic signature verification failed (data altered or invalid signature)",
         certificate,
         branding
       );

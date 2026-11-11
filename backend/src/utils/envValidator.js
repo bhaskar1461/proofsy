@@ -36,6 +36,9 @@ const validateEnv = () => {
   if (env === "test" && !process.env.JWT_SECRET) {
     process.env.JWT_SECRET = "test_jwt_secret_test_jwt_secret_32chars";
   }
+  if (!process.env.SIGNING_SECRET && process.env.JWT_SECRET) {
+    process.env.SIGNING_SECRET = process.env.JWT_SECRET;
+  }
 
   // ── Check universally required vars ──
   const missing = [];

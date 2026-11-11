@@ -9,6 +9,8 @@
  * 5. UTF-8 encoding
  */
 
+const crypto = require("crypto");
+
 /**
  * Format a Date or date string to strict ISO 8601 UTC string
  * @param {Date|string|number} date
@@ -19,6 +21,74 @@ function toIsoUtc(date) {
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
   return d.toISOString();
+}
+
+/**
+ * Build canonical payload according to Phase 1 spec: (id, name, event, issuer, date)
+ * All fields strictly normalized and sorted alphabetically.
+ */
+function buildHmacCanonicalPayload({ id, name, event, issuer, date }) {
+  const normId = String(id || "").trim().toUpperCase();
+  if (!normId) {
+    throw new Error("id (verificationCode) is required for HMAC canonical payload");
+  }
+  return {
+    date: toIsoUtc(date),
+    event: String(event || "").trim().normalize("NFC"),
+    id: normId,
+    issuer: String(issuer || "").trim().normalize("NFC"),
+    name: String(name || "").trim().normalize("NFC"),
+  };
+}
+
+/**
+ * Deterministically serialize HMAC canonical payload with alphabetical keys
+ */
+function serializeHmacCanonicalPayload(payload) {
+  const normalized = buildHmacCanonicalPayload(payload);
+  const sortedKeys = Object.keys(normalized).sort();
+  const sortedObj = {};
+  for (const k of sortedKeys) {
+    sortedObj[k] = normalized[k];
+  }
+  return JSON.stringify(sortedObj);
+}
+
+/**
+ * Sign canonical payload with HMAC-SHA256 and server-side secret
+ * @param {Object} payload { id, name, event, issuer, date }
+ * @param {string} [secret] Server secret
+ * @returns {string} Hex-encoded HMAC-SHA256 signature
+ */
+function signHmacPayload(payload, secret = null) {
+  const key = secret || process.env.SIGNING_SECRET || process.env.JWT_SECRET;
+  if (!key) {
+    throw new Error("Server secret (SIGNING_SECRET or JWT_SECRET) is required for HMAC signing");
+  }
+  const serialized = serializeHmacCanonicalPayload(payload);
+  return crypto.createHmac("sha256", key).update(serialized, "utf8").digest("hex");
+}
+
+/**
+ * Recompute HMAC-SHA256 signature and compare in constant time
+ * @param {Object} payload { id, name, event, issuer, date }
+ * @param {string} signature Hex-encoded signature to verify
+ * @param {string} [secret] Server secret
+ * @returns {boolean} True if signature matches, false otherwise
+ */
+function verifyHmacPayload(payload, signature, secret = null) {
+  if (!signature || typeof signature !== "string") return false;
+  try {
+    const expected = signHmacPayload(payload, secret);
+    const expectedBuf = Buffer.from(expected, "hex");
+    const actualBuf = Buffer.from(signature.trim().toLowerCase(), "hex");
+    if (expectedBuf.length !== actualBuf.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(expectedBuf, actualBuf);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -99,4 +169,8 @@ module.exports = {
   buildLegacyPayload,
   serializeLegacyPayload,
   toIsoUtc,
+  buildHmacCanonicalPayload,
+  serializeHmacCanonicalPayload,
+  signHmacPayload,
+  verifyHmacPayload,
 };

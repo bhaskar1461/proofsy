@@ -7,23 +7,24 @@ const lifecycleController = require("../controllers/lifecycleController");
 const { protect } = require("../middleware/auth");
 const { tenantProtect } = require("../middleware/tenantProtect");
 
-// Configure multer for CSV uploads.
-const CSV_MIME_TYPES = new Set([
+// Configure multer for CSV and Excel uploads.
+const ALLOWED_MIME_TYPES = new Set([
   "text/csv",
   "application/csv",
   "application/vnd.ms-excel",
   "text/plain",
   "application/octet-stream",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
 
 const upload = multer({
   dest: path.join(__dirname, "../../uploads/"),
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === ".csv" && CSV_MIME_TYPES.has(file.mimetype)) {
+    if ([".csv", ".xlsx", ".xls"].includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error("Only CSV files are allowed"), false);
+      cb(new Error("Only CSV and Excel (.xlsx) files are allowed"), false);
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
@@ -32,6 +33,7 @@ const upload = multer({
 // All certificate routes require authentication and are workspace-scoped.
 router.post("/generate", protect, tenantProtect, upload.single("file"), certificateController.generateCertificates);
 router.get("/batch/:batchId", protect, tenantProtect, certificateController.getBatchStatus);
+router.get("/event/:id/download-zip", protect, tenantProtect, certificateController.downloadEventCertificatesZip);
 router.post("/send-emails", protect, tenantProtect, certificateController.sendEmails);
 router.get("/stats", protect, tenantProtect, certificateController.getStats);
 router.get("/verification-analytics", protect, tenantProtect, certificateController.getVerificationAnalytics);

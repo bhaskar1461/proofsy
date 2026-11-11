@@ -2,9 +2,9 @@ name: CI/CD Pipeline
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, 'phase-*']
   pull_request:
-    branches: [main, develop]
+    branches: [main, develop, 'phase-*']
 
 env:
   REGISTRY: ghcr.io
@@ -71,6 +71,8 @@ jobs:
           MONGODB_URI: mongodb://localhost:27017/proofsy-test
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
+          JWT_SECRET: test_jwt_secret_for_ci_pipeline_min_32_characters
+          SIGNING_SECRET: test_hmac_signing_secret_for_ci_pipeline
 
   # ── Frontend Build & Test ──
   test-frontend:

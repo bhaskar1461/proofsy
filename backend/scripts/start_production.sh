@@ -33,7 +33,9 @@ pm2 start src/workers/startWorker.js --name "proofsy-worker" -i 1 --max-memory-r
 
 # Start Next.js frontend
 cd /var/www/proofsy/frontend
-pm2 start npm --name "proofsy-frontend" -- start -- -p 3000
+ln -sf /var/www/proofsy/frontend/public /var/www/proofsy/frontend/.next/standalone/public
+ln -sf /var/www/proofsy/frontend/.next/static /var/www/proofsy/frontend/.next/standalone/.next/static
+PORT=3000 pm2 start /var/www/proofsy/frontend/.next/standalone/server.js --name "proofsy-frontend" --cwd /var/www/proofsy/frontend/.next/standalone
 
 pm2 save
 PM2_EOF

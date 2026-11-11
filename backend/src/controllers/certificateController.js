@@ -1,8 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const csv = require("csv-parser");
-const { randomUUID: uuidv4 } = require("crypto");
+const AdmZip = require("adm-zip");
 const mongoose = require("mongoose");
 const User = require("../models/User");
 const Event = require("../models/Event");
@@ -10,6 +9,7 @@ const Certificate = require("../models/Certificate");
 const IssuanceBatch = require("../models/IssuanceBatch");
 const { getCertificateQueue } = require("../services/certificateQueue");
 const auditService = require("../services/auditService");
+const { parseAndValidateRecipientFile } = require("../utils/fileParser");
 
 const MAX_CSV_ROWS = 50000;
 
@@ -68,48 +68,28 @@ exports.generateCertificates = async (req, res) => {
       return res.status(404).json({ success: false, error: "Event not found or unauthorized" });
     }
 
-    // Parse CSV and collect rows (with an upper bound to prevent resource abuse)
-    const rows = [];
-    let limitExceeded = false;
-    await new Promise((resolve, reject) => {
-      const stream = fs.createReadStream(file.path).pipe(csv());
-      stream
-        .on("data", (row) => {
-          if (limitExceeded) return;
-          if (row.name && row.email) {
-            if (rows.length >= MAX_CSV_ROWS) {
-              limitExceeded = true;
-              stream.destroy();
-              return;
-            }
-            rows.push({
-              name: String(row.name).trim().slice(0, 200),
-              email: String(row.email).trim().toLowerCase().slice(0, 320),
-            });
-          }
-        })
-        .on("end", resolve)
-        .on("close", resolve)
-        .on("error", reject);
-    });
+    // Parse and validate uploaded CSV or XLSX file
+    let parsedResult;
+    try {
+      parsedResult = await parseAndValidateRecipientFile(file.path, file.originalname);
+    } catch (parseErr) {
+      return res.status(400).json({ success: false, error: parseErr.message });
+    }
 
-    if (limitExceeded) {
+    const { validRows, errors, totalRows } = parsedResult;
+
+    if (validRows.length === 0) {
       return res.status(400).json({
         success: false,
-        error: `CSV exceeds the maximum of ${MAX_CSV_ROWS} rows.`,
+        error: "Validation failed: No valid recipient rows found in file.",
+        errors,
+        totalRows,
       });
     }
 
-    if (rows.length === 0) {
-      return res.status(400).json({
-        success: false,
-        error: "CSV is empty or missing required columns (name, email).",
-      });
-    }
-
-    // Deduplicate rows by email in-memory
+    // Deduplicate valid rows by email in-memory
     const uniqueRowsMap = new Map();
-    for (const row of rows) {
+    for (const row of validRows) {
       if (!uniqueRowsMap.has(row.email)) {
         uniqueRowsMap.set(row.email, row.name);
       }
@@ -251,6 +231,9 @@ exports.generateCertificates = async (req, res) => {
         jobId: batch._id.toString(),
         batchId: batch._id.toString(),
         totalRowsProcessed: created,
+        totalRowsInFile: totalRows,
+        errorCount: errors.length,
+        errors: errors.slice(0, 50),
         status: batch.status,
       },
     });
@@ -760,5 +743,60 @@ exports.getVerificationAnalytics = async (req, res) => {
   } catch (err) {
     console.error("getVerificationAnalytics error:", err);
     return res.status(500).json({ success: false, error: "Internal server error" });
+  }
+};
+
+// GET /api/events/:id/download-zip
+// GET /api/certificates/event/:id/download-zip
+exports.downloadEventCertificatesZip = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ success: false, error: "Invalid event ID" });
+    }
+
+    const event = await Event.findOne({ _id: id, workspaceId: req.workspaceId });
+    if (!event) {
+      return res.status(404).json({ success: false, error: "Event not found or unauthorized" });
+    }
+
+    const certificates = await Certificate.find({
+      eventId: id,
+      workspaceId: req.workspaceId,
+      status: "generated",
+    }).populate("userId", "name email");
+
+    if (!certificates || certificates.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: "No generated certificates available to download for this event.",
+      });
+    }
+
+    const safeEventName = (event.name || "certificates").replace(/[^a-zA-Z0-9_-]/g, "_");
+    const zip = new AdmZip();
+
+    for (const cert of certificates) {
+      if (!cert.pdfUrl) continue;
+      let relativePath = cert.pdfUrl.replace(/^\/storage\//, "storage/");
+      let fullPath = path.resolve(__dirname, "../../", relativePath);
+
+      if (fs.existsSync(fullPath)) {
+        const recipientName = (cert.userId?.name || "recipient").replace(/[^a-zA-Z0-9_-]/g, "_");
+        const zipEntryName = `${cert.verificationCode}_${recipientName}.pdf`;
+        zip.addLocalFile(fullPath, "", zipEntryName);
+      }
+    }
+
+    const zipBuffer = zip.toBuffer();
+    res.setHeader("Content-Type", "application/zip");
+    res.setHeader("Content-Disposition", `attachment; filename="proofsy_${safeEventName}_certificates.zip"`);
+    res.setHeader("Content-Length", zipBuffer.length);
+    return res.end(zipBuffer);
+  } catch (err) {
+    console.error("downloadEventCertificatesZip error:", err);
+    if (!res.headersSent) {
+      return res.status(500).json({ success: false, error: "Internal server error" });
+    }
   }
 };

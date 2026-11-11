@@ -12,7 +12,7 @@ const Organization = require("../models/Organization");
 const Workspace = require("../models/Workspace");
 const IssuanceBatch = require("../models/IssuanceBatch");
 const { getFontBuffer } = require("../services/fontService");
-const { getSigningProvider } = require("../services/signing");
+const { getSigningProvider, signHmacPayload, serializeHmacCanonicalPayload } = require("../services/signing");
 const storageService = require("../services/storageService");
 
 // Draw rounded rectangle helper for custom Finder patterns
@@ -178,6 +178,16 @@ async function generatePremiumPNG(template, user, event, certificate, themeColor
   return pngUrl;
 }
 
+function escapeXml(unsafe) {
+  if (unsafe == null) return "";
+  return String(unsafe)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
 // Generate premium scalable vector SVG
 async function generatePremiumSVG(template, user, event, certificate, themeColor) {
   const dateStr = new Date(event.date).toLocaleDateString("en-US", {
@@ -185,12 +195,12 @@ async function generatePremiumSVG(template, user, event, certificate, themeColor
   });
 
   const variables = {
-    recipient_name: user.name,
-    event_name: event.name,
-    date: dateStr,
-    organizer: event.organizerName || "",
-    verification_code: certificate.verificationCode,
-    duration: event.duration || "",
+    recipient_name: escapeXml(user.name),
+    event_name: escapeXml(event.name),
+    date: escapeXml(dateStr),
+    organizer: escapeXml(event.organizerName || "Proofsy Organizer"),
+    verification_code: escapeXml(certificate.verificationCode),
+    duration: escapeXml(event.duration || ""),
   };
 
   const width = template.width;
@@ -216,13 +226,16 @@ async function generatePremiumSVG(template, user, event, certificate, themeColor
 
   let textLayersElements = "";
   for (const layer of template.textLayers) {
-    const text = layer.variable === "custom" ? layer.customText : variables[layer.variable];
-    if (!text) continue;
+    const rawText = layer.variable === "custom" ? layer.customText : variables[layer.variable];
+    if (!rawText) continue;
+    const text = escapeXml(rawText);
 
     const fontStyle = layer.fontWeight === "bold" ? "font-weight='bold'" : "";
     const textAnchor = layer.textAlign === "center" ? "middle" : layer.textAlign === "right" ? "end" : "start";
+    const color = escapeXml(layer.color || "#000000");
+    const fontFamily = escapeXml(layer.fontFamily || "Arial");
 
-    textLayersElements += `  <text x="${layer.x}" y="${layer.y}" font-family="'${layer.fontFamily}', Arial, sans-serif" font-size="${layer.fontSize}" ${fontStyle} fill="${layer.color}" text-anchor="${textAnchor}" dominant-baseline="middle">${text}</text>\n`;
+    textLayersElements += `  <text x="${layer.x}" y="${layer.y}" font-family="'${fontFamily}', Arial, sans-serif" font-size="${layer.fontSize}" ${fontStyle} fill="${color}" text-anchor="${textAnchor}" dominant-baseline="middle">${text}</text>\n`;
   }
 
   const bgUrl = template.backgroundUrl;
@@ -378,37 +391,29 @@ async function generatePDFWithPdfLib(template, user, event, certificate) {
     });
   }
 
-  // 4. Institutional Cryptographic Signing via SigningProvider
-  const claims = {
-    verificationCode: certificate.verificationCode,
-    recipientName: user.name,
-    recipientEmail: user.email,
-    eventName: event.name,
-    eventDate: event.date,
-    organizationId: event.organizationId,
-    issuedAt: certificate.createdAt || new Date(),
-    expiresAt: certificate.expiresAt || null,
+  // 4. Canonical Cryptographic Signing (HMAC-SHA256 according to Phase 1 spec)
+  const hmacPayload = {
+    id: certificate.verificationCode,
+    name: user.name,
+    event: event.name,
+    issuer: event.organizerName || "Proofsy",
+    date: event.date,
   };
-
-  const signingProvider = getSigningProvider("institution");
-  const signingResult = await signingProvider.sign(claims);
-
-  const signature = signingResult.signature;
-  const signingKeyId = signingResult.signingKeyId;
-  const signatureAlgorithm = signingResult.algorithm;
-  const providerType = signingResult.signingProvider;
-  const signedAt = new Date(signingResult.signedAt);
+  const signature = signHmacPayload(hmacPayload);
+  const signatureAlgorithm = "HMAC-SHA256";
+  const providerType = "hmac-sha256";
+  const signedAt = new Date();
 
   // Set signature metadata on certificate object
   certificate.cryptographicSignature = signature;
-  certificate.signingKeyId = signingKeyId;
+  certificate.signingKeyId = "server-hmac-v1";
   certificate.signatureAlgorithm = signatureAlgorithm;
   certificate.signingProvider = providerType;
   certificate.signedAt = signedAt;
 
   // Embed canonical claims and signature into PDF properties
-  doc.setSubject(signingResult.canonicalPayload);
-  doc.setKeywords([signature, signingKeyId]);
+  doc.setSubject(serializeHmacCanonicalPayload(hmacPayload));
+  doc.setKeywords([signature, "HMAC-SHA256"]);
 
   const pdfBytes = await doc.save();
   const pdfKey = `pdfs/${certificate.verificationCode}.pdf`;

@@ -91,12 +91,13 @@ async function getTransporter(smtpSettings = null) {
  */
 async function sendCertificateEmail({ recipientName, recipientEmail, eventName, eventDate, verificationCode, pdfUrl, verifyUrl, smtpSettings = null }) {
   const transport = await getTransporter(smtpSettings);
-  let fromAddress = process.env.EMAIL_FROM || "noreply@proofsy.io";
-  let fromName = process.env.EMAIL_FROM_NAME || "test";
+  let fromAddress = process.env.EMAIL_FROM || "certificates@proofsy.tech";
+  let fromName = process.env.EMAIL_FROM_NAME || "Proofsy Certificates";
+  const replyToAddress = process.env.EMAIL_REPLY_TO || "support@proofsy.tech";
 
   if (smtpSettings && smtpSettings.fromEmail) {
     fromAddress = smtpSettings.fromEmail;
-    fromName = smtpSettings.fromName || process.env.EMAIL_FROM_NAME || "test";
+    fromName = smtpSettings.fromName || process.env.EMAIL_FROM_NAME || "Proofsy Certificates";
   }
 
   const dateStr = eventDate
@@ -176,6 +177,7 @@ async function sendCertificateEmail({ recipientName, recipientEmail, eventName, 
 
   const info = await transport.sendMail({
     from: `"${fromName}" <${fromAddress}>`,
+    replyTo: replyToAddress,
     to: recipientEmail,
     subject: `Your credential for ${eventName} is ready`,
     text: `Hi ${recipientName},\n\nYour credential for ${eventName} (${dateStr}) is ready.\nCode: ${verificationCode}\n\nDownload: ${pdfUrl || "pending"}\nVerify: ${verifyUrl}\n\n— Proofsy`,
@@ -196,7 +198,9 @@ async function sendCertificateEmail({ recipientName, recipientEmail, eventName, 
  */
 async function sendRecipientOTPEmail(recipientEmail, recipientName, otp) {
   const transport = await getTransporter();
-  const fromAddress = process.env.EMAIL_FROM || "noreply@proofsy.io";
+  const fromAddress = process.env.EMAIL_FROM || "certificates@proofsy.tech";
+  const fromName = process.env.EMAIL_FROM_NAME || "Proofsy";
+  const replyToAddress = process.env.EMAIL_REPLY_TO || "support@proofsy.tech";
 
   const safeRecipientName = escapeHtml(recipientName);
   const safeOtp = escapeHtml(otp);
@@ -230,7 +234,8 @@ async function sendRecipientOTPEmail(recipientEmail, recipientName, otp) {
 </html>`;
 
   const info = await transport.sendMail({
-    from: `"Proofsy" <${fromAddress}>`,
+    from: `"${fromName}" <${fromAddress}>`,
+    replyTo: replyToAddress,
     to: recipientEmail,
     subject: `Your Proofsy Login Code: ${otp}`,
     text: `Hi ${recipientName},\n\nYour Proofsy login code is: ${otp}\n\nThis code expires in 10 minutes.\n\n— Proofsy`,
